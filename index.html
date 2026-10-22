@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <title>fishing - 联机版</title>
     <link rel="icon" href="https://pic.pngsucai.com/00/92/47/00764b2fd6e8c67e.webp">
-    <!-- 引入 MQTT.js 用于联机通信 -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body {
@@ -88,7 +87,7 @@
 
         #action-btns {
             position: absolute; bottom: 30px; right: 30px;
-            display: flex; flex-direction: row; gap: 15px; /* 横向排列 */
+            display: flex; flex-direction: row; gap: 15px;
             pointer-events: auto;
         }
         .action-btn {
@@ -134,102 +133,49 @@
 
         /* ================= 聊天系统 UI ================= */
         #chat-container {
-            position: absolute;
-            bottom: 120px; /* 位于饥饿度条上方 */
-            left: 30px;
-            width: 350px;
-            max-height: 250px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            pointer-events: none;
-            z-index: 40;
+            position: absolute; bottom: 120px; left: 30px;
+            width: 350px; max-height: 250px;
+            display: flex; flex-direction: column; gap: 5px;
+            pointer-events: none; z-index: 40;
         }
 
         .chat-message {
-            background-color: rgba(0, 0, 0, 0.6);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 16px;
-            word-wrap: break-word;
-            animation: chatIn 0.3s ease-out;
+            background-color: rgba(0, 0, 0, 0.6); color: white;
+            padding: 8px 12px; border-radius: 8px; font-size: 16px;
+            word-wrap: break-word; animation: chatIn 0.3s ease-out;
             transition: opacity 1s;
         }
-        .chat-message .sender {
-            color: #00FFFF;
-            font-weight: bold;
-            margin-right: 5px;
-        }
-        
-        @keyframes chatIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
+        .chat-message .sender { color: #00FFFF; font-weight: bold; margin-right: 5px; }
+        @keyframes chatIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
 
-        /* PC 端输入框 */
         #pc-chat-input {
-            position: absolute;
-            bottom: 70px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 50%;
-            max-width: 600px;
+            position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+            width: 50%; max-width: 600px;
             background-color: rgba(0, 0, 0, 0.8);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 25px;
-            padding: 10px 20px;
-            color: white;
-            font-size: 18px;
-            outline: none;
-            display: none;
-            z-index: 45;
-            pointer-events: auto;
+            border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 25px;
+            padding: 10px 20px; color: white; font-size: 18px;
+            outline: none; display: none; z-index: 45; pointer-events: auto;
         }
 
-        /* 触屏端输入弹窗 */
         #touch-chat-panel {
-            position: fixed;
-            top: 50%; left: 50%;
+            position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%) scale(0.9);
-            width: 80vw;
-            background-color: rgba(30, 30, 30, 0.95);
-            padding: 20px;
-            border-radius: 12px;
-            display: none;
-            flex-direction: column;
-            gap: 15px;
-            z-index: 100;
-            opacity: 0;
-            transition: all 0.2s ease;
-            pointer-events: auto;
-            border: 2px solid #555;
+            width: 80vw; background-color: rgba(30, 30, 30, 0.95);
+            padding: 20px; border-radius: 12px;
+            display: none; flex-direction: column; gap: 15px;
+            z-index: 100; opacity: 0; transition: all 0.2s ease;
+            pointer-events: auto; border: 2px solid #555;
         }
-        #touch-chat-panel.active {
-            display: flex;
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
-        }
+        #touch-chat-panel.active { display: flex; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        
         #touch-chat-input {
-            width: 100%;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #777;
-            background-color: #222;
-            color: white;
-            font-size: 18px;
-            box-sizing: border-box;
-            outline: none;
+            width: 100%; padding: 15px; border-radius: 8px;
+            border: 1px solid #777; background-color: #222;
+            color: white; font-size: 18px; box-sizing: border-box; outline: none;
         }
         #touch-chat-send {
-            padding: 12px;
-            background-color: #00FFFF;
-            color: #333;
-            border: none;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
+            padding: 12px; background-color: #00FFFF; color: #333;
+            border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer;
         }
         #touch-chat-send:active { background-color: #00BFFF; }
 
@@ -402,7 +348,7 @@
                 </div>
 
                 <div class="setting-item">
-                    <label>上传皮肤</label>
+                    <label>上传本地皮肤图片</label>
                     <input type="file" id="skin-input" accept="image/*">
                 </div>
                 
@@ -491,11 +437,11 @@
             grassEnabled: 1,
             waveEnabled: 1,
             playerName: generateDefaultName(),
-            skinDataUrl: null
+            skinDataUrl: null // 存储本地压缩后的 Base64 字符串
         };
 
         let selectedFishIndex = -1;
-        let isChatting = false; // 是否正在聊天
+        let isChatting = false;
 
         function loadGame() {
             const saved = localStorage.getItem('fishing_save');
@@ -663,28 +609,24 @@
             return sprite;
         }
 
-        function createPlayerMesh(name, skinDataUrl) {
+        // 只有圆柱身体
+        function createPlayerMesh(name, skinBase64) {
             const group = new THREE.Group();
             
-            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.5, 16);
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.8, 16); 
             let bodyMat;
-            if (skinDataUrl) {
-                const texture = new THREE.TextureLoader().load(skinDataUrl);
+            if (skinBase64) {
+                const texture = new THREE.TextureLoader().load(skinBase64, undefined, undefined, (err) => {
+                    console.error('皮肤加载失败:', err);
+                });
                 bodyMat = new THREE.MeshStandardMaterial({ map: texture });
             } else {
-                bodyMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+                bodyMat = new THREE.MeshStandardMaterial({ color: 0x000000 }); 
             }
             const body = new THREE.Mesh(bodyGeo, bodyMat);
-            body.position.y = 0.75;
+            body.position.y = 0.9; 
             body.castShadow = true;
             group.add(body);
-
-            const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
-            const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
-            const head = new THREE.Mesh(headGeo, headMat);
-            head.position.y = 1.8;
-            head.castShadow = true;
-            group.add(head);
 
             const nameSprite = createNameSprite(name);
             group.add(nameSprite);
@@ -702,15 +644,13 @@
             if (topic !== TOPIC_ROOM) return;
             try {
                 const data = JSON.parse(message.toString());
-                if (data.clientId === clientId) return; // 忽略自己
+                if (data.clientId === clientId) return;
 
-                // 处理聊天消息
                 if (data.type === 'chat') {
                     showChatMessage(data.name, data.text);
                     return;
                 }
 
-                // 处理玩家状态
                 if (data.type === 'state') {
                     if (!remotePlayers[data.clientId]) {
                         if (!data.name) return;
@@ -724,7 +664,8 @@
                         };
                     }
                     const rp = remotePlayers[data.clientId];
-                    rp.targetPos.set(data.x, data.y, data.z);
+                    // ===== 修复：同步过来的 y 是眼睛高度，模型应该放在脚底位置，减去 1.6 米 =====
+                    rp.targetPos.set(data.x, data.y - 1.6, data.z);
                     rp.targetYaw = data.yaw;
                     rp.lastUpdate = performance.now();
                 }
@@ -742,7 +683,7 @@
                 z: camera.position.z,
                 yaw: yaw,
                 name: gameState.playerName,
-                skin: includeSkin ? gameState.skinDataUrl : null
+                skin: includeSkin ? gameState.skinDataUrl : null 
             };
             mqttClient.publish(TOPIC_ROOM, JSON.stringify(data));
         }
@@ -756,7 +697,6 @@
                 text: text
             };
             mqttClient.publish(TOPIC_ROOM, JSON.stringify(data));
-            // 本地也显示一下
             showChatMessage(gameState.playerName, text);
         }
 
@@ -772,12 +712,10 @@
             msgDiv.innerHTML = `<span class="sender">${sender}:</span> ${text}`;
             chatContainer.appendChild(msgDiv);
 
-            // 保持聊天记录不超过5条
             if (chatContainer.children.length > 5) {
                 chatContainer.removeChild(chatContainer.firstChild);
             }
 
-            // 5秒后淡出移除
             setTimeout(() => {
                 msgDiv.style.opacity = '0';
                 setTimeout(() => {
@@ -788,21 +726,19 @@
             }, 5000);
         }
 
-        // PC 端聊天输入控制
         function openPcChat() {
             if (isChatting) return;
             isChatting = true;
             pcChatInput.style.display = 'block';
             pcChatInput.focus();
-            // 释放鼠标锁定，方便输入
             if (document.pointerLockElement === document.body) document.exitPointerLock();
         }
 
         function closePcChat() {
+            if (!isChatting) return;
             isChatting = false;
             pcChatInput.style.display = 'none';
             pcChatInput.value = '';
-            // 恢复鼠标锁定
             if (gameState.touchEnabled === 0 && !document.getElementById('shop-panel').classList.contains('active') && !document.getElementById('settings-panel').classList.contains('active')) {
                 document.body.requestPointerLock();
             }
@@ -816,10 +752,13 @@
             } else if (e.code === 'Escape') {
                 closePcChat();
             }
-            e.stopPropagation(); // 防止触发游戏按键
+            e.stopPropagation();
         });
 
-        // 触屏端聊天按钮
+        pcChatInput.addEventListener('blur', () => {
+            closePcChat();
+        });
+
         const btnChat = document.getElementById('btn-chat');
         btnChat.addEventListener('pointerdown', (e) => { 
             e.stopPropagation(); e.preventDefault(); 
@@ -835,6 +774,16 @@
             touchChatPanel.classList.remove('active');
             touchChatInput.blur();
         });
+
+        window.addEventListener('pointerdown', (e) => {
+            if (touchChatPanel.classList.contains('active')) {
+                if (!e.target.closest('#touch-chat-panel')) {
+                    touchChatPanel.classList.remove('active');
+                    touchChatInput.blur();
+                }
+            }
+        });
+
 
         // ================= 触控/输入系统 =================
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, jump = false;
@@ -864,12 +813,11 @@
             }
         }
 
-        // PC 键盘鼠标
         document.body.addEventListener('click', (e) => {
             if (gameState.touchEnabled === 1) return;
             const isShopOpen = document.getElementById('shop-panel').classList.contains('active');
             const isSettingsOpen = document.getElementById('settings-panel').classList.contains('active');
-            if (!isShopOpen && !isSettingsOpen && !isChatting && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+            if (!isShopOpen && !isSettingsOpen && !isChatting && e.target.id !== 'pc-chat-input' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
                  document.body.requestPointerLock();
             }
         });
@@ -885,7 +833,7 @@
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return; // 如果正在输入框打字，不触发游戏操作
+            if (e.target.tagName === 'INPUT') return; 
 
             if (e.code === 'KeyT' || e.code === 'Enter') {
                 e.preventDefault();
@@ -931,10 +879,10 @@
         });
         document.addEventListener('contextmenu', e => e.preventDefault());
 
-        // 触屏事件
         window.addEventListener('pointerdown', (e) => {
             if (gameState.touchEnabled !== 1) return;
             if (e.target.closest('.panel') || e.target.closest('#touch-chat-panel')) return;
+            
             if (activeRing) activeRing.remove();
             activeRing = document.createElement('div');
             activeRing.className = 'touch-ring';
@@ -1417,19 +1365,39 @@
             broadcastState(true);
         };
 
+        // 修复：本地皮肤图片上传、压缩、本地保存、网络同步
         document.getElementById('skin-input').onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (event) => {
-                if (event.target.result.length > 500000) {
-                    showFloatingText("图片太大了，请选个小点的");
-                    return;
-                }
-                gameState.skinDataUrl = event.target.result;
-                saveGame();
-                showFloatingText("皮肤已更新");
-                broadcastState(true);
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // 压缩到最大 256x256，控制Base64大小
+                    const maxSize = 256;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height && width > maxSize) {
+                        height *= maxSize / width;
+                        width = maxSize;
+                    } else if (height > maxSize) {
+                        width *= maxSize / height;
+                        height = maxSize;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 压缩成 JPEG，质量 0.6，体积很小
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    gameState.skinDataUrl = compressedBase64;
+                    saveGame();
+                    showFloatingText("皮肤已更新并保存");
+                    broadcastState(true); // 重新广播
+                };
+                img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         };
