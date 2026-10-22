@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>fishing - 联机版</title>
+    <title>fishing</title>
     <link rel="icon" href="https://pic.pngsucai.com/00/92/47/00764b2fd6e8c67e.webp">
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -437,7 +437,7 @@
             grassEnabled: 1,
             waveEnabled: 1,
             playerName: generateDefaultName(),
-            skinDataUrl: null // 存储本地压缩后的 Base64 字符串
+            skinDataUrl: null
         };
 
         let selectedFishIndex = -1;
@@ -566,7 +566,7 @@
             return -15;
         }
 
-        // 鱼漂与鱼线
+        // 本地鱼漂与鱼线
         const bobberGroup = new THREE.Group();
         const topGeo = new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, 0, Math.PI/2);
         const bottomGeo = new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2);
@@ -609,7 +609,6 @@
             return sprite;
         }
 
-        // 只有圆柱身体
         function createPlayerMesh(name, skinBase64) {
             const group = new THREE.Group();
             
@@ -634,6 +633,27 @@
             return group;
         }
 
+        // 为远程玩家创建浮标和鱼线
+        function createRemoteFishingGear() {
+            const bGroup = new THREE.Group();
+            const bTop = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshBasicMaterial({color: 0xffffff}));
+            bTop.position.y = 0.1;
+            const bMid = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8), new THREE.MeshBasicMaterial({color: 0xff0000}));
+            const bBot = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2), new THREE.MeshBasicMaterial({color: 0xffffff}));
+            bBot.position.y = -0.1;
+            bGroup.add(bTop, bMid, bBot);
+            bGroup.visible = false;
+            scene.add(bGroup);
+
+            const rLineGeo = new THREE.BufferGeometry();
+            const rLine = new THREE.Line(rLineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.6 }));
+            rLine.visible = false;
+            rLine.frustumCulled = false;
+            scene.add(rLine);
+
+            return { bobber: bGroup, line: rLine };
+        }
+
         mqttClient.on('connect', () => {
             console.log('MQTT 已连接');
             mqttClient.subscribe(TOPIC_ROOM);
@@ -656,18 +676,29 @@
                         if (!data.name) return;
                         const mesh = createPlayerMesh(data.name, data.skin);
                         scene.add(mesh);
+                        
+                        const gear = createRemoteFishingGear();
+
                         remotePlayers[data.clientId] = {
                             mesh: mesh,
-                            targetPos: new THREE.Vector3(data.x, data.y, data.z),
+                            bobber: gear.bobber,
+                            line: gear.line,
+                            targetPos: new THREE.Vector3(data.x, data.y - 1.6, data.z),
                             targetYaw: data.yaw,
+                            fState: data.fState || 'IDLE',
+                            bobberTarget: new THREE.Vector3(data.bx || 0, data.by || 0, data.bz || 0),
                             lastUpdate: performance.now()
                         };
                     }
                     const rp = remotePlayers[data.clientId];
-                    // ===== 修复：同步过来的 y 是眼睛高度，模型应该放在脚底位置，减去 1.6 米 =====
                     rp.targetPos.set(data.x, data.y - 1.6, data.z);
                     rp.targetYaw = data.yaw;
                     rp.lastUpdate = performance.now();
+                    
+                    rp.fState = data.fState || 'IDLE';
+                    if (data.bx !== undefined) {
+                        rp.bobberTarget.set(data.bx, data.by, data.bz);
+                    }
                 }
             } catch(e) {}
         });
@@ -683,7 +714,11 @@
                 z: camera.position.z,
                 yaw: yaw,
                 name: gameState.playerName,
-                skin: includeSkin ? gameState.skinDataUrl : null 
+                skin: includeSkin ? gameState.skinDataUrl : null,
+                fState: fishingState,
+                bx: fishingState !== 'IDLE' ? bobberGroup.position.x : null,
+                by: fishingState !== 'IDLE' ? bobberGroup.position.y : null,
+                bz: fishingState !== 'IDLE' ? bobberGroup.position.z : null
             };
             mqttClient.publish(TOPIC_ROOM, JSON.stringify(data));
         }
@@ -1082,9 +1117,12 @@
                 const rp = remotePlayers[id];
                 if (time - rp.lastUpdate > 5000) {
                     scene.remove(rp.mesh);
+                    scene.remove(rp.bobber);
+                    scene.remove(rp.line);
                     delete remotePlayers[id];
                     continue;
                 }
+                
                 rp.mesh.position.lerp(rp.targetPos, 0.2);
                 let targetRot = rp.targetYaw;
                 let currentRot = rp.mesh.rotation.y;
@@ -1092,6 +1130,26 @@
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
                 rp.mesh.rotation.y += diff * 0.2;
+
+                if (rp.fState !== 'IDLE') {
+                    rp.bobber.visible = true;
+                    rp.line.visible = true;
+
+                    rp.bobber.position.lerp(rp.bobberTarget, 0.3);
+
+                    const localRodTip = new THREE.Vector3(0.4, 1.5, -0.5);
+                    const rodTipWorld = localRodTip.applyMatrix4(rp.mesh.matrixWorld);
+                    
+                    const midPoint = new THREE.Vector3().addVectors(rodTipWorld, rp.bobber.position).multiplyScalar(0.5);
+                    midPoint.y -= 1.0; 
+
+                    const curve = new THREE.QuadraticBezierCurve3(rodTipWorld, midPoint, rp.bobber.position);
+                    const points = curve.getPoints(10);
+                    rp.line.geometry.setFromPoints(points);
+                } else {
+                    rp.bobber.visible = false;
+                    rp.line.visible = false;
+                }
             }
 
             if (gameState.waveEnabled === 1) {
@@ -1365,7 +1423,6 @@
             broadcastState(true);
         };
 
-        // 修复：本地皮肤图片上传、压缩、本地保存、网络同步
         document.getElementById('skin-input').onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -1374,7 +1431,6 @@
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    // 压缩到最大 256x256，控制Base64大小
                     const maxSize = 256;
                     let width = img.width;
                     let height = img.height;
@@ -1390,12 +1446,11 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // 压缩成 JPEG，质量 0.6，体积很小
                     const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
                     gameState.skinDataUrl = compressedBase64;
                     saveGame();
                     showFloatingText("皮肤已更新并保存");
-                    broadcastState(true); // 重新广播
+                    broadcastState(true);
                 };
                 img.src = event.target.result;
             };
