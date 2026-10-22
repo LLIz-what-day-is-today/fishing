@@ -285,7 +285,7 @@
                     </div>
                     
                     <div class="rod-info">当前: <div id="current-rod-color" class="color-box"></div></div>
-                    <div class="rod-info">下一级: <div id="next-rod-color" class="color-box"></div> 花费 ￥<span id="upgrade-cost">1000</span></div>
+                    <div class="rod-info">下一级: <div id="next-rod-color" class="color-box"></div> 花费 ￥<span id="upgrade-cost">100</span></div>
                     
                     <div class="shop-section-title" style="margin-top: 30px;">烤鱼</div>
                     <button class="upgrade-btn" id="cook-fish-btn" style="height: 70px; font-size: 16px;">
@@ -1069,14 +1069,13 @@
                 targetRotate = -10;
                 
                 if (biteTimer > 2) {
-                    // ===== 修复：鱼跑了，回到等待状态继续钓鱼 =====
+                    // 鱼跑了，回到等待状态继续钓鱼
                     fishingState = 'WAITING';
-                    fishingTimer = 0; // 重置等待计时
+                    fishingTimer = 0; 
                     currentWaitTime = FISHING_TIMES[gameState.rodLevel] + (Math.random() * 2 - 1);
                     if(gameState.rodLevel === 10) currentWaitTime = 1 + Math.random();
-                    crosshairEl.classList.remove('bite'); // 取消准星红色
+                    crosshairEl.classList.remove('bite'); 
                     showFloatingText("鱼跑了，继续等待...");
-                    // ==========================================
                 }
             } else if (fishingState === 'REELING') {
                 rodAnimTimer += delta;
@@ -1136,7 +1135,10 @@
                 const nextColorBox = document.getElementById('next-rod-color');
                 nextColorBox.style.backgroundColor = ROD_COLORS[gameState.rodLevel];
                 nextColorBox.style.display = 'inline-block';
-                const cost = Math.pow(2, gameState.rodLevel - 1) * 1000;
+                
+                // 修改：初始升级费用修改为 100
+                const cost = Math.pow(2, gameState.rodLevel - 1) * 100;
+                
                 document.getElementById('upgrade-cost').innerText = cost;
                 document.getElementById('upgrade-btn').style.display = 'flex';
             } else {
@@ -1310,7 +1312,9 @@
 
         document.getElementById('upgrade-btn').onclick = () => {
             if (gameState.rodLevel < 10) {
-                const cost = Math.pow(2, gameState.rodLevel - 1) * 1000;
+                // 修改：初始升级费用修改为 100
+                const cost = Math.pow(2, gameState.rodLevel - 1) * 100;
+                
                 if (gameState.money >= cost) {
                     gameState.money -= cost;
                     gameState.rodLevel++;
