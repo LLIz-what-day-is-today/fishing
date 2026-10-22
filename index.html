@@ -88,7 +88,7 @@
 
         #action-btns {
             position: absolute; bottom: 30px; right: 30px;
-            display: flex; flex-direction: column; gap: 20px;
+            display: flex; flex-direction: row; gap: 15px; /* 横向排列 */
             pointer-events: auto;
         }
         .action-btn {
@@ -100,6 +100,7 @@
             touch-action: none;
         }
         .action-btn:active { background-color: rgba(255, 255, 255, 0.8); color: #333; }
+        #btn-chat { background-color: rgba(100, 200, 255, 0.5); }
 
         /* ================= UI 层 ================= */
         .ui-layer {
@@ -130,6 +131,107 @@
         }
         #crosshair.bite { background-color: red; transform: translate(-50%, -50%) scale(1.5); animation: pulse 0.5s infinite alternate; }
         @keyframes pulse { from { transform: translate(-50%, -50%) scale(1.2); } to { transform: translate(-50%, -50%) scale(1.8); } }
+
+        /* ================= 聊天系统 UI ================= */
+        #chat-container {
+            position: absolute;
+            bottom: 120px; /* 位于饥饿度条上方 */
+            left: 30px;
+            width: 350px;
+            max-height: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        .chat-message {
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 16px;
+            word-wrap: break-word;
+            animation: chatIn 0.3s ease-out;
+            transition: opacity 1s;
+        }
+        .chat-message .sender {
+            color: #00FFFF;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        @keyframes chatIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* PC 端输入框 */
+        #pc-chat-input {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50%;
+            max-width: 600px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 25px;
+            padding: 10px 20px;
+            color: white;
+            font-size: 18px;
+            outline: none;
+            display: none;
+            z-index: 45;
+            pointer-events: auto;
+        }
+
+        /* 触屏端输入弹窗 */
+        #touch-chat-panel {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            width: 80vw;
+            background-color: rgba(30, 30, 30, 0.95);
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 100;
+            opacity: 0;
+            transition: all 0.2s ease;
+            pointer-events: auto;
+            border: 2px solid #555;
+        }
+        #touch-chat-panel.active {
+            display: flex;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        #touch-chat-input {
+            width: 100%;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #777;
+            background-color: #222;
+            color: white;
+            font-size: 18px;
+            box-sizing: border-box;
+            outline: none;
+        }
+        #touch-chat-send {
+            padding: 12px;
+            background-color: #00FFFF;
+            color: #333;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        #touch-chat-send:active { background-color: #00BFFF; }
 
         /* 全屏面板 */
         .panel {
@@ -220,6 +322,8 @@
             #hunger-container { font-size: 16px; bottom: 20px; left: 10px; }
             #hunger-bar-bg { width: 120px; height: 20px; }
             #rod-2d { width: 350px; right: -80px; bottom: -60px; }
+            #chat-container { bottom: 90px; left: 10px; width: 250px; max-height: 150px; }
+            .chat-message { font-size: 14px; padding: 6px 8px; }
         }
     </style>
 </head>
@@ -240,6 +344,7 @@
             <div id="joystick-base"><div id="joystick-knob"></div></div>
         </div>
         <div id="action-btns">
+            <div class="action-btn" id="btn-chat">聊</div>
             <div class="action-btn" id="btn-jump">跳</div>
         </div>
     </div>
@@ -247,6 +352,13 @@
     <!-- UI 层 -->
     <div class="ui-layer">
         <div id="crosshair"></div>
+        
+        <!-- 聊天记录区 -->
+        <div id="chat-container"></div>
+
+        <!-- PC 聊天输入框 -->
+        <input type="text" id="pc-chat-input" placeholder="输入聊天内容，按 Enter 发送 (Esc 取消)..." maxlength="50">
+
         <div id="hunger-container">
             饥饿: 
             <div id="hunger-bar-bg"><div id="hunger-bar"></div></div>
@@ -326,6 +438,12 @@
         </div>
     </div>
 
+    <!-- 触屏端聊天输入弹窗 -->
+    <div id="touch-chat-panel">
+        <input type="text" id="touch-chat-input" placeholder="输入聊天内容..." maxlength="50">
+        <button id="touch-chat-send">发送</button>
+    </div>
+
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
     </script>
@@ -333,7 +451,7 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 随机名字生成器 (39个字母 + 25个数字) ---
+        // --- 随机名字生成器 ---
         function generateDefaultName() {
             const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
             let name = '';
@@ -343,7 +461,6 @@
         }
 
         // --- 联机核心 MQTT 配置 ---
-        // 使用免费的公共 MQTT Broker 作为中继服务器
         const clientId = 'fishing_' + Math.random().toString(16).substr(2, 8);
         const mqttClient = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
             clientId: clientId,
@@ -373,11 +490,12 @@
             ringSize: 60, 
             grassEnabled: 1,
             waveEnabled: 1,
-            playerName: generateDefaultName(), // 默认名字
-            skinDataUrl: null // 默认黑色皮肤，如果不为空则是图片
+            playerName: generateDefaultName(),
+            skinDataUrl: null
         };
 
         let selectedFishIndex = -1;
+        let isChatting = false; // 是否正在聊天
 
         function loadGame() {
             const saved = localStorage.getItem('fishing_save');
@@ -523,9 +641,8 @@
         scene.add(fishingLine);
 
         // ================= 联机网络逻辑 =================
-        const remotePlayers = {}; // 存储其他玩家的模型和状态
+        const remotePlayers = {}; 
 
-        // 生成头顶名字材质
         function createNameSprite(name) {
             const canvas = document.createElement('canvas');
             canvas.width = 512; canvas.height = 128;
@@ -542,29 +659,26 @@
             const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
             const sprite = new THREE.Sprite(material);
             sprite.scale.set(4, 1, 1);
-            sprite.position.y = 2.5; // 在头顶
+            sprite.position.y = 2.5;
             return sprite;
         }
 
-        // 创建玩家身体
         function createPlayerMesh(name, skinDataUrl) {
             const group = new THREE.Group();
             
-            // 身体
             const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.5, 16);
             let bodyMat;
             if (skinDataUrl) {
                 const texture = new THREE.TextureLoader().load(skinDataUrl);
                 bodyMat = new THREE.MeshStandardMaterial({ map: texture });
             } else {
-                bodyMat = new THREE.MeshStandardMaterial({ color: 0x000000 }); // 默认黑色
+                bodyMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
             }
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.y = 0.75;
             body.castShadow = true;
             group.add(body);
 
-            // 头
             const headGeo = new THREE.SphereGeometry(0.4, 16, 16);
             const headMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
             const head = new THREE.Mesh(headGeo, headMat);
@@ -572,7 +686,6 @@
             head.castShadow = true;
             group.add(head);
 
-            // 名字
             const nameSprite = createNameSprite(name);
             group.add(nameSprite);
 
@@ -580,10 +693,8 @@
         }
 
         mqttClient.on('connect', () => {
-            console.log('MQTT 已连接，进入联机房间');
+            console.log('MQTT 已连接');
             mqttClient.subscribe(TOPIC_ROOM);
-            
-            // 广播我的加入
             broadcastState(true);
         });
 
@@ -591,26 +702,32 @@
             if (topic !== TOPIC_ROOM) return;
             try {
                 const data = JSON.parse(message.toString());
-                if (data.clientId === clientId) return; // 忽略自己的消息
+                if (data.clientId === clientId) return; // 忽略自己
 
-                // 如果有新玩家，创建模型
-                if (!remotePlayers[data.clientId]) {
-                    if (!data.name) return; // 忽略不完整的数据
-                    const mesh = createPlayerMesh(data.name, data.skin);
-                    scene.add(mesh);
-                    remotePlayers[data.clientId] = {
-                        mesh: mesh,
-                        targetPos: new THREE.Vector3(data.x, data.y, data.z),
-                        targetYaw: data.yaw,
-                        lastUpdate: performance.now()
-                    };
+                // 处理聊天消息
+                if (data.type === 'chat') {
+                    showChatMessage(data.name, data.text);
+                    return;
                 }
 
-                // 更新目标位置和旋转
-                const rp = remotePlayers[data.clientId];
-                rp.targetPos.set(data.x, data.y, data.z);
-                rp.targetYaw = data.yaw;
-                rp.lastUpdate = performance.now();
+                // 处理玩家状态
+                if (data.type === 'state') {
+                    if (!remotePlayers[data.clientId]) {
+                        if (!data.name) return;
+                        const mesh = createPlayerMesh(data.name, data.skin);
+                        scene.add(mesh);
+                        remotePlayers[data.clientId] = {
+                            mesh: mesh,
+                            targetPos: new THREE.Vector3(data.x, data.y, data.z),
+                            targetYaw: data.yaw,
+                            lastUpdate: performance.now()
+                        };
+                    }
+                    const rp = remotePlayers[data.clientId];
+                    rp.targetPos.set(data.x, data.y, data.z);
+                    rp.targetYaw = data.yaw;
+                    rp.lastUpdate = performance.now();
+                }
             } catch(e) {}
         });
 
@@ -618,22 +735,111 @@
         function broadcastState(includeSkin = false) {
             if (!mqttClient.connected) return;
             const data = {
+                type: 'state',
                 clientId: clientId,
                 x: camera.position.x,
                 y: camera.position.y,
                 z: camera.position.z,
                 yaw: yaw,
                 name: gameState.playerName,
-                skin: includeSkin ? gameState.skinDataUrl : null // 皮肤较大，只有加入时发送或变更时发送
+                skin: includeSkin ? gameState.skinDataUrl : null
             };
             mqttClient.publish(TOPIC_ROOM, JSON.stringify(data));
         }
+
+        function broadcastChat(text) {
+            if (!mqttClient.connected) return;
+            const data = {
+                type: 'chat',
+                clientId: clientId,
+                name: gameState.playerName,
+                text: text
+            };
+            mqttClient.publish(TOPIC_ROOM, JSON.stringify(data));
+            // 本地也显示一下
+            showChatMessage(gameState.playerName, text);
+        }
+
+        // ================= 聊天 UI 逻辑 =================
+        const chatContainer = document.getElementById('chat-container');
+        const pcChatInput = document.getElementById('pc-chat-input');
+        const touchChatPanel = document.getElementById('touch-chat-panel');
+        const touchChatInput = document.getElementById('touch-chat-input');
+
+        function showChatMessage(sender, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'chat-message';
+            msgDiv.innerHTML = `<span class="sender">${sender}:</span> ${text}`;
+            chatContainer.appendChild(msgDiv);
+
+            // 保持聊天记录不超过5条
+            if (chatContainer.children.length > 5) {
+                chatContainer.removeChild(chatContainer.firstChild);
+            }
+
+            // 5秒后淡出移除
+            setTimeout(() => {
+                msgDiv.style.opacity = '0';
+                setTimeout(() => {
+                    if (msgDiv.parentNode === chatContainer) {
+                        chatContainer.removeChild(msgDiv);
+                    }
+                }, 1000);
+            }, 5000);
+        }
+
+        // PC 端聊天输入控制
+        function openPcChat() {
+            if (isChatting) return;
+            isChatting = true;
+            pcChatInput.style.display = 'block';
+            pcChatInput.focus();
+            // 释放鼠标锁定，方便输入
+            if (document.pointerLockElement === document.body) document.exitPointerLock();
+        }
+
+        function closePcChat() {
+            isChatting = false;
+            pcChatInput.style.display = 'none';
+            pcChatInput.value = '';
+            // 恢复鼠标锁定
+            if (gameState.touchEnabled === 0 && !document.getElementById('shop-panel').classList.contains('active') && !document.getElementById('settings-panel').classList.contains('active')) {
+                document.body.requestPointerLock();
+            }
+        }
+
+        pcChatInput.addEventListener('keydown', (e) => {
+            if (e.code === 'Enter') {
+                const text = pcChatInput.value.trim();
+                if (text) broadcastChat(text);
+                closePcChat();
+            } else if (e.code === 'Escape') {
+                closePcChat();
+            }
+            e.stopPropagation(); // 防止触发游戏按键
+        });
+
+        // 触屏端聊天按钮
+        const btnChat = document.getElementById('btn-chat');
+        btnChat.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); 
+            touchChatPanel.classList.add('active');
+            touchChatInput.focus();
+        });
+
+        document.getElementById('touch-chat-send').addEventListener('pointerdown', (e) => {
+            e.stopPropagation(); e.preventDefault();
+            const text = touchChatInput.value.trim();
+            if (text) broadcastChat(text);
+            touchChatInput.value = '';
+            touchChatPanel.classList.remove('active');
+            touchChatInput.blur();
+        });
 
         // ================= 触控/输入系统 =================
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, jump = false;
         const velocity = new THREE.Vector3();
         let isGrounded = true;
-        let isEnterPressed = false;
         let isSprinting = false;
 
         let joystickActive = false;
@@ -663,7 +869,7 @@
             if (gameState.touchEnabled === 1) return;
             const isShopOpen = document.getElementById('shop-panel').classList.contains('active');
             const isSettingsOpen = document.getElementById('settings-panel').classList.contains('active');
-            if (!isShopOpen && !isSettingsOpen && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+            if (!isShopOpen && !isSettingsOpen && !isChatting && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
                  document.body.requestPointerLock();
             }
         });
@@ -679,13 +885,16 @@
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Enter') isEnterPressed = true;
-            if (e.code === 'ControlLeft' || e.code === 'ShiftLeft') isSprinting = true; 
-            if (e.code === 'KeyS' && isEnterPressed) {
+            if (e.target.tagName === 'INPUT') return; // 如果正在输入框打字，不触发游戏操作
+
+            if (e.code === 'KeyT' || e.code === 'Enter') {
                 e.preventDefault();
-                if (!document.getElementById('settings-panel').classList.contains('active')) toggleSettings();
+                openPcChat();
                 return;
             }
+
+            if (e.code === 'ControlLeft' || e.code === 'ShiftLeft') isSprinting = true; 
+            
             const isUIOpen = document.getElementById('shop-panel').classList.contains('active') || document.getElementById('settings-panel').classList.contains('active');
             if (isUIOpen && e.code !== 'KeyB' && e.code !== 'Escape') return;
 
@@ -701,7 +910,7 @@
         });
 
         document.addEventListener('keyup', (e) => {
-            if (e.code === 'Enter') isEnterPressed = false;
+            if (e.target.tagName === 'INPUT') return;
             if (e.code === 'ControlLeft' || e.code === 'ShiftLeft') isSprinting = false;
             switch (e.code) {
                 case 'KeyW': moveForward = false; break;
@@ -713,7 +922,7 @@
         });
 
         document.addEventListener('mousedown', (e) => {
-            if (gameState.touchEnabled === 1) return;
+            if (gameState.touchEnabled === 1 || isChatting) return;
             const isUIOpen = document.getElementById('shop-panel').classList.contains('active') || document.getElementById('settings-panel').classList.contains('active');
             if (e.button === 2 && !isUIOpen) {
                 if (fishingState === 'IDLE') startCasting();
@@ -725,7 +934,7 @@
         // 触屏事件
         window.addEventListener('pointerdown', (e) => {
             if (gameState.touchEnabled !== 1) return;
-            if (e.target.closest('.panel')) return;
+            if (e.target.closest('.panel') || e.target.closest('#touch-chat-panel')) return;
             if (activeRing) activeRing.remove();
             activeRing = document.createElement('div');
             activeRing.className = 'touch-ring';
@@ -806,7 +1015,7 @@
 
         renderer.domElement.addEventListener('pointerdown', (e) => {
             const isUIOpen = document.getElementById('shop-panel').classList.contains('active') || document.getElementById('settings-panel').classList.contains('active');
-            if (isUIOpen || gameState.touchEnabled === 0) return;
+            if (isUIOpen || gameState.touchEnabled === 0 || isChatting) return;
             pointerDownTime = performance.now(); pointerDownPos = { x: e.clientX, y: e.clientY }; hasDragged = false;
             if (e.clientX > window.innerWidth / 2) {
                 isDraggingView = true; lastTouchX = e.clientX; lastTouchY = e.clientY;
@@ -915,26 +1124,20 @@
             const delta = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
 
-            // 网络状态广播 (每 100ms 发送一次位置)
             broadcastTimer += delta;
             if (broadcastTimer > 0.1) {
                 broadcastState(false);
                 broadcastTimer = 0;
             }
 
-            // 更新其他玩家的位置 (平滑插值)
             for (const id in remotePlayers) {
                 const rp = remotePlayers[id];
-                // 如果超过 5 秒没收到消息，视为掉线，移除模型
                 if (time - rp.lastUpdate > 5000) {
                     scene.remove(rp.mesh);
                     delete remotePlayers[id];
                     continue;
                 }
-                // 平滑插值位置
                 rp.mesh.position.lerp(rp.targetPos, 0.2);
-                
-                // 平滑插值旋转
                 let targetRot = rp.targetYaw;
                 let currentRot = rp.mesh.rotation.y;
                 let diff = targetRot - currentRot;
@@ -968,7 +1171,7 @@
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); forward.y = 0; forward.normalize();
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion); right.y = 0; right.normalize();
 
-            if (!isUIOpen) {
+            if (!isUIOpen && !isChatting) {
                 const moveDir = new THREE.Vector3();
                 if (moveForward) moveDir.add(forward);
                 if (moveBackward) moveDir.sub(forward);
@@ -983,13 +1186,13 @@
 
             velocity.y -= 25 * delta;
             if (isWaterArea && camera.position.y < 1.6) {
-                if (jump && !isUIOpen) {
+                if (jump && !isUIOpen && !isChatting) {
                     velocity.y += 35 * delta; velocity.y = Math.min(velocity.y, 6); 
                 } else {
                     velocity.y += 23.5 * delta; velocity.y = Math.max(velocity.y, -2); 
                 }
             } else {
-                if (jump && isGrounded && !isUIOpen) { velocity.y = 10; isGrounded = false; }
+                if (jump && isGrounded && !isUIOpen && !isChatting) { velocity.y = 10; isGrounded = false; }
             }
             camera.position.y += velocity.y * delta;
 
@@ -1174,7 +1377,7 @@
             const panel = document.getElementById('shop-panel');
             if (panel.classList.contains('active')) {
                 panel.classList.remove('active'); setTimeout(() => { panel.style.display = 'none'; }, 250); saveGame();
-                if (gameState.touchEnabled === 0) document.body.requestPointerLock();
+                if (gameState.touchEnabled === 0 && !isChatting) document.body.requestPointerLock();
             } else {
                 if (gameState.touchEnabled === 0) document.exitPointerLock();
                 panel.style.display = 'block'; void panel.offsetWidth; panel.classList.add('active');
@@ -1186,7 +1389,7 @@
             const panel = document.getElementById('settings-panel');
             if (panel.classList.contains('active')) {
                 panel.classList.remove('active'); setTimeout(() => { panel.style.display = 'none'; }, 250); saveGame();
-                if (gameState.touchEnabled === 0) document.body.requestPointerLock();
+                if (gameState.touchEnabled === 0 && !isChatting) document.body.requestPointerLock();
             } else {
                 if (gameState.touchEnabled === 0) document.exitPointerLock();
                 panel.style.display = 'block'; void panel.offsetWidth; panel.classList.add('active');
@@ -1198,8 +1401,6 @@
                 document.getElementById('sens-slider').value = gameState.sensitivity;
                 document.getElementById('crosshair-slider').value = gameState.crosshairType;
                 document.getElementById('custom-crosshair').value = gameState.customCrosshairText;
-                
-                // 填充名字
                 document.getElementById('name-input').value = gameState.playerName;
             }
         }
@@ -1208,23 +1409,19 @@
         document.getElementById('close-shop').onclick = toggleShop;
         document.getElementById('close-settings').onclick = toggleSettings;
         
-        // 名字修改
         document.getElementById('name-input').oninput = (e) => {
             let val = e.target.value.trim();
             if (val === '') val = '无名氏';
             gameState.playerName = val;
             saveGame();
-            // 名字变了，立刻重新广播
             broadcastState(true);
         };
 
-        // 皮肤上传
         document.getElementById('skin-input').onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (event) => {
-                // 限制文件大小 (例如 500KB) 防止网络卡死
                 if (event.target.result.length > 500000) {
                     showFloatingText("图片太大了，请选个小点的");
                     return;
@@ -1232,7 +1429,6 @@
                 gameState.skinDataUrl = event.target.result;
                 saveGame();
                 showFloatingText("皮肤已更新");
-                // 广播新皮肤
                 broadcastState(true);
             };
             reader.readAsDataURL(file);
