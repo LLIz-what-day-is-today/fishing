@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>fishing</title>
+    <link rel="icon" href="https://pic.pngsucai.com/00/92/47/00764b2fd6e8c67e.webp">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB;
+            font-family: sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: none; /* 禁止浏览器默认手势 */
+        }
+        canvas { display: block; touch-action: none; }
+        
+        /* 滤镜 */
+        #water-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(0, 100, 255, 0.5);
+            display: none; pointer-events: none; z-index: 5;
+            opacity: 0; transition: opacity 0.3s ease;
+        }
+        #water-overlay.active { display: block; opacity: 1; }
+
+        #death-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(255, 0, 0, 0.6);
+            display: none; pointer-events: none; z-index: 6;
+            opacity: 0; transition: opacity 0.2s ease;
+        }
+        #death-overlay.active { display: block; opacity: 1; }
+
+        /* 2D 鱼竿图片 (层级 8) */
+        #rod-2d {
+            position: fixed;
+            right: -100px; bottom: -80px; width: 550px;   
+            pointer-events: none; z-index: 8; 
+            transform-origin: bottom right; 
+        }
+
+        /* ================= 触控 UI (层级 20) ================= */
+        #mobile-controls {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 20;
+        }
+        
+        .top-left-btns {
+            position: absolute; top: 15px; left: 15px;
+            display: flex; gap: 10px; pointer-events: auto;
+        }
+        .icon-btn {
+            width: 45px; height: 45px; background-color: rgba(40, 40, 40, 0.7);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 24px; font-weight: bold;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(4px);
+            touch-action: none;
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+        }
+        .icon-btn:active { background-color: rgba(100, 100, 100, 0.8); }
+
+        #m-btn-shop {
+            background-image: url('https://images.icon-icons.com/1580/PNG/512/2849824-basket-buy-market-multimedia-shop-shopping-store_107977.png');
+            filter: invert(1); 
+        }
+
+        #joystick-area {
+            position: absolute; bottom: 20px; left: 20px;
+            width: 120px; height: 120px;
+            pointer-events: auto; touch-action: none;
+        }
+        #joystick-base {
+            width: 100%; height: 100%; background-color: rgba(50, 50, 50, 0.5);
+            border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3);
+            position: relative; display: flex; align-items: center; justify-content: center;
+        }
+        #joystick-knob {
+            width: 50px; height: 50px; background-color: rgba(200, 200, 200, 0.8);
+            border-radius: 50%; position: absolute;
+        }
+
+        #action-btns {
+            position: absolute; bottom: 30px; right: 30px;
+            display: flex; flex-direction: column; gap: 20px;
+            pointer-events: auto;
+        }
+        .action-btn {
+            width: 60px; height: 60px; border-radius: 50%;
+            background-color: rgba(200, 200, 200, 0.5);
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 20px; font-weight: bold;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            touch-action: none;
+        }
+        .action-btn:active { background-color: rgba(255, 255, 255, 0.8); color: #333; }
+
+        /* ================= UI 层 (层级 30) ================= */
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 30; 
+        }
+        
+        #hunger-container {
+            position: absolute; bottom: 30px; left: 30px;
+            display: flex; align-items: center;
+            color: white; font-size: 20px; font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+        }
+        #hunger-bar-bg {
+            width: 200px; height: 25px; background-color: rgba(85, 85, 85, 0.5);
+            margin: 0 10px; border-radius: 4px; overflow: hidden;
+            border: 1px solid white;
+        }
+        #hunger-bar {
+            width: 100%; height: 100%; background-color: #00BFFF; 
+            transition: width 0.5s ease, background-color 0.3s;
+        }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 6px; height: 6px; background-color: white;
+            border-radius: 50%; pointer-events: none;
+        }
+        #crosshair.bite { background-color: red; transform: translate(-50%, -50%) scale(1.5); animation: pulse 0.5s infinite alternate; }
+        @keyframes pulse { from { transform: translate(-50%, -50%) scale(1.2); } to { transform: translate(-50%, -50%) scale(1.8); } }
+
+        /* 全屏面板 (层级 100) */
+        .panel {
+            pointer-events: auto;
+            position: fixed; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white; padding: 20px; box-sizing: border-box;
+            display: none; z-index: 100;
+            opacity: 0; transition: opacity 0.25s ease;
+            overflow-y: auto; touch-action: auto;
+        }
+        .panel.active { display: block; opacity: 1; }
+        
+        .ui-close {
+            position: absolute; top: 15px; right: 25px;
+            color: #FFFFFF; font-size: 45px; cursor: pointer;
+            font-weight: bold; line-height: 1; z-index: 101;
+            transition: transform 0.2s, color 0.2s;
+        }
+        .ui-close:hover { color: #DDDDDD; transform: scale(1.1) rotate(90deg); }
+
+        /* 商店内部布局 */
+        .shop-header { 
+            display: flex; justify-content: space-between; align-items: baseline; 
+            border-bottom: 2px solid white; padding-bottom: 10px; 
+            max-width: 1000px; margin: 0 auto 20px auto; 
+        }
+        .shop-header h1 { margin: 0; font-size: 32px; }
+        .shop-header .money { font-size: 24px; color: #00FFFF; }
+        
+        .shop-content { 
+            display: flex; flex-direction: column; gap: 20px;
+            max-width: 1000px; margin: 0 auto; 
+        }
+        @media (min-width: 768px) {
+            .shop-content { flex-direction: row; }
+            .shop-left { flex: 1; padding-right: 20px; border-right: 2px solid rgba(255,255,255,0.3); }
+            .shop-right { flex: 1; padding-left: 20px; }
+        }
+        
+        .shop-section-title { font-size: 20px; margin-bottom: 15px; color: #FFD700; }
+        
+        .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .fish-card { background-color: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; justify-content: space-between; }
+        .fish-card:hover { border-color: #888; transform: translateY(-2px); }
+        .fish-card.selected { border-color: #00FFFF; background-color: rgba(0, 255, 255, 0.1); box-shadow: 0 0 10px rgba(0,255,255,0.3); }
+        .fish-card .name { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+        .fish-card .info { font-size: 12px; color: #ccc; margin-bottom: 10px; }
+        .fish-card button { background-color: #00FFFF; color: #333; border: none; padding: 6px 10px; font-size: 13px; font-weight: bold; cursor: pointer; border-radius: 4px; width: 100%; transition: background 0.2s; }
+        .fish-card button:hover { background-color: #00E5EE; }
+        .fish-card button.btn-eat { background-color: #32CD32; color: white; }
+        .fish-card button.btn-eat:hover { background-color: #3CB371; }
+
+        .upgrade-btn { background-color: #00FFFF; height: 100px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 18px; color: #333; font-weight: bold; cursor: pointer; margin-bottom: 20px; border-radius: 8px; transition: all 0.2s ease; }
+        .upgrade-btn:hover { background-color: #00E5EE; transform: scale(1.02); box-shadow: 0 0 15px rgba(0,255,255,0.5); }
+        .upgrade-btn:active { transform: scale(0.98); }
+        
+        .rod-info { font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .color-box { display: inline-block; width: 24px; height: 24px; border-radius: 4px; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        
+        /* 设置内部布局 */
+        .settings-container { max-width: 600px; margin: 0 auto; margin-top: 20px; padding-bottom: 50px; }
+        .setting-item { margin-bottom: 30px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; }
+        .setting-item label { display: flex; justify-content: space-between; font-size: 18px; margin-bottom: 10px; }
+        .setting-item label span { color: #00FFFF; font-weight: bold; }
+        
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #00FFFF; height: 20px; }
+        input[type=text] { width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; color: white; outline: none; font-size: 16px; box-sizing: border-box; }
+        .range-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 14px; color: #aaa; }
+
+        /* 漂浮文字 */
+        .floating-text { position: absolute; color: #FFD700; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 3px black; pointer-events: none; animation: floatUp 1s ease-out forwards; z-index: 50; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-50px) scale(1.5); } }
+
+        /* ================= 触摸反色光圈特效 ================= */
+        .touch-ring {
+            position: fixed;
+            border-radius: 50%;
+            border: 3px solid white;
+            background-color: rgba(255, 255, 255, 0.2);
+            mix-blend-mode: difference; 
+            pointer-events: none;
+            z-index: 40;
+            transform: scale(0.5);
+            opacity: 1;
+            transition: transform 0.2s ease-out, opacity 0.3s ease-out;
+        }
+        .touch-ring.fade-out {
+            transform: scale(2);
+            opacity: 0;
+        }
+        
+        @media (max-width: 600px) {
+            #hunger-container { font-size: 16px; bottom: 20px; left: 10px; }
+            #hunger-bar-bg { width: 120px; height: 20px; }
+            #rod-2d { width: 350px; right: -80px; bottom: -60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container"></div>
+    
+    <!-- 2D 鱼竿图片 -->
+    <img id="rod-2d" src="https://img.alicdn.com/i2/82983860/O1CN01NOhwcG1eNvOMcDX9n_!!82983860.png" alt="rod">
+
+    <!-- 滤镜 -->
+    <div id="water-overlay"></div>
+    <div id="death-overlay"></div>
+
+    <!-- 触控模式 UI -->
+    <div id="mobile-controls">
+        <div class="top-left-btns">
+            <div class="icon-btn" id="m-btn-settings">☰</div>
+            <div class="icon-btn" id="m-btn-shop"></div>
+        </div>
+        
+        <div id="joystick-area">
+            <div id="joystick-base">
+                <div id="joystick-knob"></div>
+            </div>
+        </div>
+
+        <div id="action-btns">
+            <div class="action-btn" id="btn-jump">跳</div>
+        </div>
+    </div>
+
+    <!-- UI 层 -->
+    <div class="ui-layer">
+        <div id="crosshair"></div>
+        <div id="hunger-container">
+            饥饿: 
+            <div id="hunger-bar-bg"><div id="hunger-bar"></div></div>
+            <span id="hunger-text">100</span>
+        </div>
+
+        <!-- 商店 -->
+        <div id="shop-panel" class="panel">
+            <div class="ui-close" id="close-shop">×</div>
+            <div class="shop-header">
+                <h1>商店</h1>
+                <div class="money">￥<span id="shop-money">0</span></div>
+            </div>
+            <div class="shop-content">
+                <div class="shop-left">
+                    <div class="shop-section-title">背包 (点击生鱼可选中)</div>
+                    <div id="sell-items" class="item-grid"></div>
+                </div>
+                <div class="shop-right">
+                    <div class="shop-section-title">鱼竿</div>
+                    <div class="upgrade-btn" id="upgrade-btn">
+                        <div style="font-size: 24px;">↑</div><div style="font-size: 14px;">升级</div>
+                    </div>
+                    
+                    <div class="rod-info">当前: <div id="current-rod-color" class="color-box"></div></div>
+                    <div class="rod-info">下一级: <div id="next-rod-color" class="color-box"></div> 花费 ￥<span id="upgrade-cost">1000</span></div>
+                    
+                    <div class="shop-section-title" style="margin-top: 30px;">烤鱼</div>
+                    <button class="upgrade-btn" id="cook-fish-btn" style="height: 70px; font-size: 16px;">
+                        烤制选中的鱼 (花费 ￥5)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设置 -->
+        <div id="settings-panel" class="panel">
+            <div class="ui-close" id="close-settings">×</div>
+            <div class="settings-container">
+                <h1 style="margin-top: 0; font-size: 28px; text-align: center; margin-bottom: 30px;">设置</h1>
+                
+                <div class="setting-item">
+                    <label>触屏模式 (0关 / 1开) <span id="lbl-touch">0</span></label>
+                    <input type="range" id="touch-slider" min="0" max="1" step="1">
+                </div>
+
+                <div class="setting-item">
+                    <label>光圈基础大小 <span id="lbl-ring">60</span></label>
+                    <input type="range" id="ring-slider" min="20" max="150" step="10">
+                </div>
+
+                <div class="setting-item">
+                    <label>显示草地 (0关 / 1开) <span id="lbl-grass">1</span></label>
+                    <input type="range" id="grass-slider" min="0" max="1" step="1">
+                </div>
+
+                <div class="setting-item">
+                    <label>海面波浪 (0关 / 1开) <span id="lbl-wave">1</span></label>
+                    <input type="range" id="wave-slider" min="0" max="1" step="1">
+                </div>
+
+                <div class="setting-item">
+                    <label>摄像机灵敏度 <span id="lbl-sens">100</span></label>
+                    <input type="range" id="sens-slider" min="10" max="200" step="10">
+                </div>
+                
+                <div class="setting-item">
+                    <label>准星样式</label>
+                    <input type="range" id="crosshair-slider" min="1" max="3" step="1">
+                    <div class="range-labels"><span>十字</span><span>点</span><span>自定义</span></div>
+                </div>
+                
+                <div class="setting-item">
+                    <label>自定义准星 (输入字符)</label>
+                    <input type="text" id="custom-crosshair" placeholder="在此输入字符" maxlength="2">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 数据与状态 ---
+        const ROD_COLORS = ['#FFFFFF', '#D3D3D3', '#A52A2A', '#FF0000', '#008000', '#FFFF00', '#FFA500', '#800080', '#ADD8E6', '#0000FF'];
+        const FISH_DATA = [
+            { name: '金鱼', price: 5, weight: 25 }, { name: '青鱼', price: 8, weight: 20 },
+            { name: '泥鳅', price: 10, weight: 15 }, { name: '鲈鱼', price: 13, weight: 15 },
+            { name: '鲍鱼', price: 5, weight: 15 }, { name: '鲩鱼', price: 20, weight: 20 },
+            { name: '草鱼', price: 15, weight: 10 }, { name: '大肥鱼', price: 10000, weight: 0.05 }
+        ];
+        const SHRIMP = { name: '虾', price: 1 };
+        const FISHING_TIMES = [0, 20, 18, 16, 14, 12, 10, 8, 6, 3, 1.5]; 
+
+        let isDeviceTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+        let gameState = {
+            money: 0, hunger: 100, rodLevel: 1, inventory: [],
+            sensitivity: 100, crosshairType: 2, customCrosshairText: '',
+            playerPos: { x: 0, y: 2, z: 15 },
+            playerRot: { pitch: 0, yaw: 0 },
+            touchEnabled: isDeviceTouch ? 1 : 0, 
+            ringSize: 60, 
+            grassEnabled: 1,
+            waveEnabled: 1
+        };
+
+        let selectedFishIndex = -1;
+
+        function loadGame() {
+            const saved = localStorage.getItem('fishing_save');
+            if (saved) {
+                try { 
+                    const parsed = JSON.parse(saved);
+                    gameState = { ...gameState, ...parsed };
+                } catch (e) {}
+            }
+            if (!Array.isArray(gameState.inventory)) gameState.inventory = [];
+            gameState.inventory.forEach(fish => { if (fish.cooked === undefined) fish.cooked = false; });
+        }
+        
+        function saveGame() {
+            gameState.playerPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
+            gameState.playerRot = { pitch: pitch, yaw: yaw };
+            localStorage.setItem('fishing_save', JSON.stringify(gameState));
+        }
+        loadGame();
+
+        // --- 场景初始化 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.003);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(gameState.playerPos.x, gameState.playerPos.y, gameState.playerPos.z);
+
+        let pitch = gameState.playerRot.pitch;
+        let yaw = gameState.playerRot.yaw;
+        camera.rotation.set(pitch, yaw, 0, 'YXZ');
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('game-container').appendChild(renderer.domElement);
+
+        // 光影
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xfff5e6, 1.2); 
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.top = 100;
+        dirLight.shadow.camera.bottom = -100;
+        dirLight.shadow.camera.left = -100;
+        dirLight.shadow.camera.right = 100;
+        scene.add(dirLight);
+
+        // 海面
+        const waterGeo = new THREE.PlaneGeometry(600, 600, 128, 128); 
+        const waterMat = new THREE.MeshStandardMaterial({ 
+            color: 0x0044aa, transparent: true, opacity: 0.85, roughness: 0.1, metalness: 0.8, side: THREE.DoubleSide, flatShading: true 
+        });
+        const water = new THREE.Mesh(waterGeo, waterMat);
+        water.rotation.x = -Math.PI / 2;
+        water.receiveShadow = true;
+        scene.add(water);
+
+        // 海底
+        const seabedGeo = new THREE.PlaneGeometry(600, 600);
+        const seabedMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const seabed = new THREE.Mesh(seabedGeo, seabedMat);
+        seabed.rotation.x = -Math.PI / 2;
+        seabed.position.y = -15;
+        seabed.receiveShadow = true;
+        scene.add(seabed);
+
+        // 海岛与沙滩
+        const islandGroup = new THREE.Group();
+        islandGroup.position.set(0, 0, -50); 
+
+        const sandGeo = new THREE.CylinderGeometry(35, 48, 17, 64); 
+        const sandMat = new THREE.MeshStandardMaterial({ color: 0xEDC9AF });
+        const sand = new THREE.Mesh(sandGeo, sandMat);
+        sand.position.y = -6.5; 
+        sand.receiveShadow = true; sand.castShadow = true;
+        islandGroup.add(sand);
+
+        const grassGeo = new THREE.CylinderGeometry(25, 35, 6, 64); 
+        const grassMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+        const grass = new THREE.Mesh(grassGeo, grassMat);
+        grass.position.y = 3.5; 
+        grass.receiveShadow = true; grass.castShadow = true;
+        islandGroup.add(grass);
+
+        // 独立的草组
+        const grassGroup = new THREE.Group();
+        const grassBladeMat = new THREE.MeshStandardMaterial({ color: 0x32CD32, side: THREE.DoubleSide, roughness: 0.9 });
+        const bladeGeoBase = new THREE.PlaneGeometry(0.15, 1.5, 1, 1);
+        bladeGeoBase.translate(0, 0.75, 0); 
+
+        for (let i = 0; i < 3000; i++) {
+            const bladeGroup = new THREE.Group();
+            const bladeCount = Math.floor(Math.random() * 3) + 1;
+            for(let j=0; j<bladeCount; j++) {
+                const blade = new THREE.Mesh(bladeGeoBase, grassBladeMat);
+                blade.rotation.y = Math.random() * Math.PI * 2; 
+                blade.scale.set(0.8 + Math.random() * 0.6, 0.5 + Math.random() * 1.2, 1);
+                blade.castShadow = true; blade.receiveShadow = true;
+                bladeGroup.add(blade);
+            }
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * 24; 
+            bladeGroup.position.set(Math.cos(angle) * dist, 6.5, Math.sin(angle) * dist);
+            bladeGroup.rotation.z = (Math.random() - 0.5) * 0.4; 
+            bladeGroup.rotation.x = (Math.random() - 0.5) * 0.4;
+            grassGroup.add(bladeGroup);
+        }
+        islandGroup.add(grassGroup);
+        scene.add(islandGroup);
+
+        function getTerrainHeight(x, z) {
+            const cx = 0, cz = -50;
+            const dist = Math.sqrt((x-cx)**2 + (z-cz)**2);
+            if (dist < 25) return 6.5;
+            if (dist < 48) return 6.5 * (1 - (dist - 25) / 23);
+            return -15;
+        }
+
+        // 鱼漂与鱼线
+        const bobberGroup = new THREE.Group();
+        const topGeo = new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, 0, Math.PI/2);
+        const bottomGeo = new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, Math.PI/2, Math.PI/2);
+        const midGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.2, 8);
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const redMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        const topMesh = new THREE.Mesh(topGeo, whiteMat); topMesh.position.y = 0.1;
+        const midMesh = new THREE.Mesh(midGeo, redMat);
+        const bottomMesh = new THREE.Mesh(bottomGeo, whiteMat); bottomMesh.position.y = -0.1;
+        bobberGroup.add(topMesh, midMesh, bottomMesh);
+        bobberGroup.visible = false;
+        scene.add(bobberGroup);
+
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, transparent: true, opacity: 0.8 });
+        const lineGeo = new THREE.BufferGeometry();
+        const fishingLine = new THREE.Line(lineGeo, lineMat);
+        fishingLine.visible = false; fishingLine.frustumCulled = false; fishingLine.renderOrder = 999;
+        scene.add(fishingLine);
+
+        // --- 玩家与输入系统 ---
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, jump = false;
+        const velocity = new THREE.Vector3();
+        let isGrounded = true;
+        let isEnterPressed = false;
+        let isSprinting = false;
+
+        // 触控变量
+        let joystickActive = false;
+        let touchStartX = 0, touchStartY = 0;
+
+        // 光圈与点击判定
+        let activeRing = null;
+        let activePointerId = null;
+        let pointerDownTime = 0;
+        let pointerDownPos = { x: 0, y: 0 };
+        let hasDragged = false;
+
+        setInterval(saveGame, 5000);
+        window.addEventListener('beforeunload', saveGame);
+
+        function applyTouchUI() {
+            if (gameState.touchEnabled === 1) {
+                document.getElementById('mobile-controls').style.display = 'block';
+                document.getElementById('crosshair').style.display = 'none'; 
+            } else {
+                document.getElementById('mobile-controls').style.display = 'none';
+                document.getElementById('crosshair').style.display = 'block';
+            }
+        }
+
+        // --- 鼠标与键盘事件 (PC) ---
+        document.body.addEventListener('click', (e) => {
+            if (gameState.touchEnabled === 1) return;
+            const isShopOpen = document.getElementById('shop-panel').classList.contains('active');
+            const isSettingsOpen = document.getElementById('settings-panel').classList.contains('active');
+            if (!isShopOpen && !isSettingsOpen && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+                 document.body.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === document.body) {
+                const sens = (gameState.sensitivity / 100) * 0.002;
+                yaw -= e.movementX * sens;
+                pitch -= e.movementY * sens;
+                pitch = Math.max(-Math.PI / 2 + 0.3, Math.min(Math.PI / 2 - 0.1, pitch));
+                camera.rotation.set(pitch, yaw, 0, 'YXZ');
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Enter') isEnterPressed = true;
+            if (e.code === 'ControlLeft' || e.code === 'ShiftLeft') isSprinting = true; 
+
+            if (e.code === 'KeyS' && isEnterPressed) {
+                e.preventDefault();
+                if (!document.getElementById('settings-panel').classList.contains('active')) toggleSettings();
+                return;
+            }
+
+            const isUIOpen = document.getElementById('shop-panel').classList.contains('active') 
+                          || document.getElementById('settings-panel').classList.contains('active');
+            if (isUIOpen && e.code !== 'KeyB' && e.code !== 'Escape') return;
+
+            switch (e.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'Space': jump = true; break;
+                case 'KeyB': toggleShop(); break;
+                case 'Escape': toggleSettings(); break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Enter') isEnterPressed = false;
+            if (e.code === 'ControlLeft' || e.code === 'ShiftLeft') isSprinting = false;
+            switch (e.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+                case 'Space': jump = false; break;
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (gameState.touchEnabled === 1) return;
+            const isUIOpen = document.getElementById('shop-panel').classList.contains('active') 
+                          || document.getElementById('settings-panel').classList.contains('active');
+            if (e.button === 2 && !isUIOpen) {
+                if (fishingState === 'IDLE') startCasting();
+                else if (fishingState === 'WAITING' || fishingState === 'BITE') reelIn();
+            }
+        });
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+
+        // ================= 触控/移动端事件完全重构 =================
+
+        // 光圈跟随特效逻辑
+        window.addEventListener('pointerdown', (e) => {
+            if (gameState.touchEnabled !== 1) return;
+            if (e.target.closest('.panel')) return;
+
+            if (activeRing) activeRing.remove();
+
+            activeRing = document.createElement('div');
+            activeRing.className = 'touch-ring';
+            
+            const size = gameState.ringSize;
+            activeRing.style.width = size + 'px';
+            activeRing.style.height = size + 'px';
+            activeRing.style.marginLeft = -(size / 2) + 'px';
+            activeRing.style.marginTop = -(size / 2) + 'px';
+            
+            activeRing.style.left = e.clientX + 'px';
+            activeRing.style.top = e.clientY + 'px';
+            document.body.appendChild(activeRing);
+            
+            activePointerId = e.pointerId;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (gameState.touchEnabled !== 1) return;
+            if (activeRing && e.pointerId === activePointerId) {
+                activeRing.style.left = e.clientX + 'px';
+                activeRing.style.top = e.clientY + 'px';
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (gameState.touchEnabled !== 1) return;
+            if (activeRing && e.pointerId === activePointerId) {
+                activeRing.classList.add('fade-out');
+                const ringToRemove = activeRing;
+                activeRing = null;
+                activePointerId = null;
+                setTimeout(() => ringToRemove.remove(), 300);
+            }
+        });
+
+        window.addEventListener('pointercancel', (e) => {
+            if (gameState.touchEnabled !== 1) return;
+            if (activeRing && e.pointerId === activePointerId) {
+                activeRing.classList.add('fade-out');
+                const ringToRemove = activeRing;
+                activeRing = null;
+                activePointerId = null;
+                setTimeout(() => ringToRemove.remove(), 300);
+            }
+        });
+
+        // 1. 摇杆
+        const jsArea = document.getElementById('joystick-area');
+        const jsKnob = document.getElementById('joystick-knob');
+        const maxJSDist = 35;
+
+        jsArea.addEventListener('pointerdown', (e) => {
+            e.stopPropagation(); 
+            e.preventDefault();
+            joystickActive = true;
+            const rect = jsArea.getBoundingClientRect();
+            touchStartX = rect.left + rect.width / 2;
+            touchStartY = rect.top + rect.height / 2;
+            jsArea.setPointerCapture(e.pointerId);
+            updateJoystick(e.clientX, e.clientY);
+        });
+
+        jsArea.addEventListener('pointermove', (e) => {
+            if (!joystickActive) return;
+            e.stopPropagation();
+            e.preventDefault();
+            updateJoystick(e.clientX, e.clientY);
+        });
+
+        jsArea.addEventListener('pointerup', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            joystickActive = false;
+            jsKnob.style.transform = `translate(0px, 0px)`;
+            moveForward = false; moveBackward = false; moveLeft = false; moveRight = false;
+            isSprinting = false;
+            jsArea.releasePointerCapture(e.pointerId);
+        });
+
+        function updateJoystick(x, y) {
+            let dx = x - touchStartX;
+            let dy = y - touchStartY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if (dist > maxJSDist) {
+                dx = (dx / dist) * maxJSDist;
+                dy = (dy / dist) * maxJSDist;
+            }
+            
+            jsKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            
+            const threshold = 10;
+            moveForward = dy < -threshold;
+            moveBackward = dy > threshold;
+            moveLeft = dx < -threshold;
+            moveRight = dx > threshold;
+
+            isSprinting = dist > maxJSDist * 0.8;
+        }
+
+        // 2. 动作按钮与左上角菜单
+        const btnJump = document.getElementById('btn-jump');
+        btnJump.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); jump = true; 
+        });
+        btnJump.addEventListener('pointerup', (e) => { 
+            e.stopPropagation(); e.preventDefault(); jump = false; 
+        });
+        btnJump.addEventListener('pointercancel', (e) => { jump = false; });
+        btnJump.addEventListener('pointerleave', (e) => { jump = false; });
+
+        const mBtnSettings = document.getElementById('m-btn-settings');
+        mBtnSettings.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); toggleSettings(); 
+        });
+        
+        const mBtnShop = document.getElementById('m-btn-shop');
+        mBtnShop.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); toggleShop(); 
+        });
+
+
+        // 3. 屏幕操作 (拖动视角 & 点击钓鱼)
+        let isDraggingView = false;
+        let lastTouchX = 0, lastTouchY = 0;
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            const isUIOpen = document.getElementById('shop-panel').classList.contains('active') 
+                          || document.getElementById('settings-panel').classList.contains('active');
+            
+            if (isUIOpen || gameState.touchEnabled === 0) return;
+            
+            pointerDownTime = performance.now();
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+            hasDragged = false;
+
+            // 只要在右半屏即可拖动视角
+            if (e.clientX > window.innerWidth / 2) {
+                isDraggingView = true;
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+            }
+            renderer.domElement.setPointerCapture(e.pointerId);
+        });
+
+        renderer.domElement.addEventListener('pointermove', (e) => {
+            if (gameState.touchEnabled === 0) return;
+            
+            const dx = e.clientX - pointerDownPos.x;
+            const dy = e.clientY - pointerDownPos.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            // 如果位移超过 10 像素，视为拖动，取消点击判定
+            if (dist > 10) {
+                hasDragged = true;
+            }
+
+            if (isDraggingView) {
+                e.preventDefault();
+                const moveX = e.clientX - lastTouchX;
+                const moveY = e.clientY - lastTouchY;
+                const sens = (gameState.sensitivity / 100) * 0.005;
+                yaw -= moveX * sens;
+                pitch -= moveY * sens;
+                pitch = Math.max(-Math.PI / 2 + 0.3, Math.min(Math.PI / 2 - 0.1, pitch));
+                camera.rotation.set(pitch, yaw, 0, 'YXZ');
+                lastTouchX = e.clientX;
+                lastTouchY = e.clientY;
+            }
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            if (gameState.touchEnabled === 0) return;
+
+            const timeElapsed = performance.now() - pointerDownTime;
+            
+            // 判定为点击（没有明显拖动，且时间较短）
+            if (!hasDragged && timeElapsed < 300) {
+                if (fishingState === 'IDLE') {
+                    startCasting();
+                } else if (fishingState === 'WAITING' || fishingState === 'BITE') {
+                    reelIn();
+                }
+            }
+
+            isDraggingView = false;
+            renderer.domElement.releasePointerCapture(e.pointerId);
+        });
+        
+        renderer.domElement.addEventListener('pointercancel', () => { isDraggingView = false; });
+
+
+        // --- 钓鱼逻辑 ---
+        let fishingState = 'IDLE'; 
+        let fishingTimer = 0, biteTimer = 0, currentWaitTime = 0;
+        let castTarget = new THREE.Vector3(), castStart = new THREE.Vector3(), castProgress = 0;
+        let rodAnimTimer = 0, isFishingOnWater = false; 
+
+        const rod2dElement = document.getElementById('rod-2d');
+        let currentRodRotate = 0, currentRodTranslateY = 0;
+        const crosshairEl = document.getElementById('crosshair');
+
+        function startCasting() {
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            
+            const waterPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.1);
+            const target = new THREE.Vector3();
+            raycaster.ray.intersectPlane(waterPlane, target);
+            
+            if (!target) {
+                target.copy(camera.position).add(raycaster.ray.direction.multiplyScalar(20));
+                target.y = 0.1;
+            }
+            
+            const maxDist = 30;
+            const dist = camera.position.distanceTo(target);
+            if (dist > maxDist) {
+                target.copy(camera.position).add(raycaster.ray.direction.normalize().multiplyScalar(maxDist));
+                target.y = 0.1;
+            }
+
+            const targetTerrainY = getTerrainHeight(target.x, target.z);
+            if (targetTerrainY > 0.5) {
+                isFishingOnWater = false;
+                target.y = targetTerrainY + 0.1;
+                showFloatingText("抛在了陆地上，无法钓到鱼");
+            } else {
+                isFishingOnWater = true;
+                target.y = 0.1;
+            }
+            
+            fishingState = 'CASTING';
+            currentWaitTime = FISHING_TIMES[gameState.rodLevel] + (Math.random() * 2 - 1);
+            if(gameState.rodLevel === 10) currentWaitTime = 1 + Math.random();
+            
+            castTarget.copy(target);
+            castStart.copy(camera.position);
+            castProgress = 0;
+            
+            bobberGroup.visible = true;
+            fishingLine.visible = true;
+            rodAnimTimer = 0;
+        }
+
+        function reelIn() {
+            if (fishingState === 'BITE') {
+                catchFish();
+                crosshairEl.classList.remove('bite');
+            }
+            fishingState = 'REELING';
+            rodAnimTimer = 0;
+        }
+
+        function catchFish() {
+            let totalWeight = 0;
+            FISH_DATA.forEach(f => totalWeight += f.weight);
+            let rand = Math.random() * totalWeight;
+            let caught = FISH_DATA[0];
+            for (let f of FISH_DATA) {
+                if (rand < f.weight) { caught = f; break; }
+                rand -= f.weight;
+            }
+            let catchList = [caught];
+            if (Math.random() < 0.75) catchList.push(SHRIMP);
+            
+            catchList.forEach(item => { gameState.inventory.push({...item, cooked: false}); });
+            
+            saveGame();
+            updateUI();
+            showFloatingText(`+1 ${caught.name}`);
+            if (document.getElementById('shop-panel').classList.contains('active')) renderShopItems();
+        }
+
+        function showFloatingText(text) {
+            const el = document.createElement('div');
+            el.className = 'floating-text';
+            el.innerText = text;
+            el.style.left = (window.innerWidth / 2) + 'px';
+            el.style.top = (window.innerHeight / 2 + 50) + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        // --- 渲染循环 ---
+        let prevTime = performance.now();
+        let hungerTick = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1);
+            prevTime = time;
+
+            if (gameState.waveEnabled === 1) {
+                const positions = water.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    const x = positions[i], y = positions[i+1];
+                    positions[i + 2] = 
+                        Math.sin(x * 0.05 + time * 0.001) * 0.8 + 
+                        Math.cos(y * 0.08 + time * 0.0012) * 0.5 +
+                        Math.sin((x + y) * 0.02 + time * 0.002) * 0.3;
+                }
+                water.geometry.attributes.position.needsUpdate = true;
+                water.geometry.computeVertexNormals(); 
+            }
+
+            const isUIOpen = document.getElementById('shop-panel').classList.contains('active') 
+                          || document.getElementById('settings-panel').classList.contains('active');
+            
+            const terrainY = getTerrainHeight(camera.position.x, camera.position.z);
+            const isWaterArea = terrainY < 0; 
+            const isUnderwater = camera.position.y < 0; 
+
+            let baseSpeed = (isUnderwater || isWaterArea) ? 4 : 7.5;
+            let speed = isSprinting ? baseSpeed * 2 : baseSpeed;
+
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            forward.y = 0; forward.normalize();
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            right.y = 0; right.normalize();
+
+            if (!isUIOpen) {
+                const moveDir = new THREE.Vector3();
+                if (moveForward) moveDir.add(forward);
+                if (moveBackward) moveDir.sub(forward);
+                if (moveRight) moveDir.add(right);
+                if (moveLeft) moveDir.sub(right);
+
+                if (moveDir.lengthSq() > 0) {
+                    moveDir.normalize();
+                    camera.position.x += moveDir.x * speed * delta;
+                    camera.position.z += moveDir.z * speed * delta;
+                }
+            }
+
+            velocity.y -= 25 * delta;
+
+            if (isWaterArea && camera.position.y < 1.6) {
+                if (jump && !isUIOpen) {
+                    velocity.y += 35 * delta; 
+                    velocity.y = Math.min(velocity.y, 6); 
+                } else {
+                    velocity.y += 23.5 * delta; 
+                    velocity.y = Math.max(velocity.y, -2); 
+                }
+            } else {
+                if (jump && isGrounded && !isUIOpen) {
+                    velocity.y = 10;
+                    isGrounded = false;
+                }
+            }
+
+            camera.position.y += velocity.y * delta;
+
+            const groundY = terrainY + 1.6;
+            if (camera.position.y <= groundY) {
+                camera.position.y = groundY;
+                velocity.y = 0;
+                isGrounded = true;
+            } else {
+                isGrounded = false;
+            }
+
+            camera.rotation.z = 0;
+
+            const waterOverlay = document.getElementById('water-overlay');
+            if (isUnderwater) waterOverlay.classList.add('active');
+            else waterOverlay.classList.remove('active');
+
+            hungerTick += delta;
+            const isMoving = moveForward || moveBackward || moveLeft || moveRight;
+            const isActivelyMoving = isMoving || jump;
+
+            let hungerLossRate = 10; 
+            if (isActivelyMoving) hungerLossRate = 5; 
+            if (isSprinting) hungerLossRate = 2; 
+
+            if (hungerTick >= hungerLossRate) {
+                gameState.hunger -= 1;
+                hungerTick = 0;
+                
+                if (gameState.hunger <= 0) {
+                    gameState.hunger = 100;
+                    const deathOverlay = document.getElementById('death-overlay');
+                    deathOverlay.classList.add('active');
+                    setTimeout(() => { deathOverlay.classList.remove('active'); }, 500);
+
+                    if (gameState.rodLevel > 1) {
+                        gameState.rodLevel -= 1;
+                        showFloatingText("你饿死了！鱼竿等级下降1级");
+                    } else {
+                        showFloatingText("你饿死了！因为鱼竿已是最低等级，未扣除等级");
+                    }
+                    if (fishingState !== 'IDLE') {
+                        fishingState = 'IDLE';
+                        bobberGroup.visible = false;
+                        fishingLine.visible = false;
+                    }
+                }
+                saveGame();
+                updateUI();
+            }
+
+            let targetRotate = 0, targetTranslateY = 0;
+            if (fishingState === 'IDLE') {
+                targetRotate = Math.sin(time * 0.002) * 2; 
+            } else if (fishingState === 'CASTING') {
+                rodAnimTimer += delta;
+                if (rodAnimTimer < 0.15) targetRotate = 25;
+                else { targetRotate = -30; targetTranslateY = -30; }
+
+                castProgress += delta * 2.5;
+                if (castProgress >= 1) {
+                    castProgress = 1;
+                    fishingState = 'WAITING';
+                    fishingTimer = 0;
+                }
+                
+                const easeProgress = 1 - Math.pow(1 - castProgress, 3);
+                bobberGroup.position.lerpVectors(castStart, castTarget, easeProgress);
+                bobberGroup.position.y += Math.sin(castProgress * Math.PI) * 6; 
+                const scale = 1 - Math.sin(castProgress * Math.PI) * 0.3;
+                bobberGroup.scale.set(scale, scale, scale);
+            } else if (fishingState === 'WAITING') {
+                fishingTimer += delta;
+                if (isFishingOnWater) {
+                    bobberGroup.position.y = 0.1 + Math.sin(time * 0.005) * 0.05;
+                    if (fishingTimer >= currentWaitTime) {
+                        fishingState = 'BITE';
+                        biteTimer = 0;
+                        crosshairEl.classList.add('bite'); 
+                    }
+                } else {
+                    bobberGroup.position.y = castTarget.y;
+                }
+                bobberGroup.scale.set(1, 1, 1); 
+            } else if (fishingState === 'BITE') {
+                biteTimer += delta;
+                bobberGroup.position.y = -0.6 + Math.sin(time * 0.05) * 0.15;
+                bobberGroup.rotation.z = Math.sin(time * 0.1) * 0.2;
+                targetRotate = -10;
+                
+                if (biteTimer > 2) {
+                    // ===== 修复：鱼跑了，回到等待状态继续钓鱼 =====
+                    fishingState = 'WAITING';
+                    fishingTimer = 0; // 重置等待计时
+                    currentWaitTime = FISHING_TIMES[gameState.rodLevel] + (Math.random() * 2 - 1);
+                    if(gameState.rodLevel === 10) currentWaitTime = 1 + Math.random();
+                    crosshairEl.classList.remove('bite'); // 取消准星红色
+                    showFloatingText("鱼跑了，继续等待...");
+                    // ==========================================
+                }
+            } else if (fishingState === 'REELING') {
+                rodAnimTimer += delta;
+                targetRotate = 20;
+                if (rodAnimTimer > 0.3) {
+                    fishingState = 'IDLE';
+                    bobberGroup.visible = false;
+                    fishingLine.visible = false;
+                    bobberGroup.rotation.z = 0; 
+                }
+            }
+
+            const smoothFactor = 1 - Math.exp(-15 * delta);
+            currentRodRotate += (targetRotate - currentRodRotate) * smoothFactor;
+            currentRodTranslateY += (targetTranslateY - currentRodTranslateY) * smoothFactor;
+            rod2dElement.style.transform = `translateY(${currentRodTranslateY}px) rotate(${currentRodRotate}deg)`;
+
+            if (bobberGroup.visible) {
+                const rect = rod2dElement.getBoundingClientRect();
+                const tipScreenX = rect.left + rect.width * 0.85;
+                const tipScreenY = rect.top + rect.height * 0.08;
+                
+                const ndcX = (tipScreenX / window.innerWidth) * 2 - 1;
+                const ndcY = -(tipScreenY / window.innerHeight) * 2 + 1;
+
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+                const rodTipWorld = raycaster.ray.at(0.5, new THREE.Vector3());
+                
+                const midPoint = new THREE.Vector3().addVectors(rodTipWorld, bobberGroup.position).multiplyScalar(0.5);
+                midPoint.y -= 1.5; 
+
+                const curve = new THREE.QuadraticBezierCurve3(rodTipWorld, midPoint, bobberGroup.position);
+                const points = curve.getPoints(20);
+                fishingLine.geometry.setFromPoints(points);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- UI 交互逻辑 ---
+        function updateUI() {
+            const hungerBar = document.getElementById('hunger-bar');
+            hungerBar.style.width = gameState.hunger + '%';
+            
+            if (gameState.hunger < 30) hungerBar.style.backgroundColor = '#FF0000';
+            else if (gameState.hunger < 60) hungerBar.style.backgroundColor = '#FFA500';
+            else hungerBar.style.backgroundColor = '#00BFFF';
+
+            document.getElementById('hunger-text').innerText = gameState.hunger;
+            document.getElementById('shop-money').innerText = gameState.money;
+            
+            const currColorBox = document.getElementById('current-rod-color');
+            currColorBox.style.backgroundColor = ROD_COLORS[gameState.rodLevel - 1];
+
+            if (gameState.rodLevel < 10) {
+                const nextColorBox = document.getElementById('next-rod-color');
+                nextColorBox.style.backgroundColor = ROD_COLORS[gameState.rodLevel];
+                nextColorBox.style.display = 'inline-block';
+                const cost = Math.pow(2, gameState.rodLevel - 1) * 1000;
+                document.getElementById('upgrade-cost').innerText = cost;
+                document.getElementById('upgrade-btn').style.display = 'flex';
+            } else {
+                const nextColorBox = document.getElementById('next-rod-color');
+                nextColorBox.style.display = 'none';
+                document.getElementById('upgrade-cost').innerText = '0';
+                document.getElementById('upgrade-btn').style.display = 'none';
+            }
+
+            document.getElementById('lbl-touch').innerText = gameState.touchEnabled;
+            document.getElementById('lbl-ring').innerText = gameState.ringSize;
+            document.getElementById('lbl-grass').innerText = gameState.grassEnabled;
+            document.getElementById('lbl-wave').innerText = gameState.waveEnabled;
+            document.getElementById('lbl-sens').innerText = gameState.sensitivity;
+
+            const ch = document.getElementById('crosshair');
+            if (gameState.crosshairType === 1) {
+                ch.innerText = '+'; ch.style.width = 'auto'; ch.style.height = 'auto'; ch.style.backgroundColor = 'transparent'; ch.style.fontSize = '20px'; ch.style.color = 'white';
+            } else if (gameState.crosshairType === 2) {
+                ch.innerText = ''; ch.style.width = '6px'; ch.style.height = '6px'; ch.style.backgroundColor = 'white';
+            } else {
+                ch.innerText = gameState.customCrosshairText || 'x'; ch.style.width = 'auto'; ch.style.height = 'auto'; ch.style.backgroundColor = 'transparent'; ch.style.fontSize = '20px'; ch.style.color = 'white';
+            }
+        }
+
+        function renderShopItems() {
+            const container = document.getElementById('sell-items');
+            container.innerHTML = '';
+            
+            if (gameState.inventory.length === 0) {
+                container.innerHTML = '<div style="grid-column: span 3; text-align: center; color: #ccc; padding: 20px;">背包为空，去钓鱼吧！</div>';
+                return;
+            }
+
+            gameState.inventory.forEach((fish, index) => {
+                const card = document.createElement('div');
+                card.className = 'fish-card';
+                if (index === selectedFishIndex) card.classList.add('selected');
+
+                const displayName = fish.cooked ? `<span style="color:#FF8C00">[熟]</span>${fish.name}` : fish.name;
+
+                if (fish.cooked) {
+                    card.innerHTML = `
+                        <div class="name">${displayName}</div>
+                        <div class="info">不可出售</div>
+                        <button class="btn-eat">食用 (+20)</button>
+                    `;
+                    card.querySelector('.btn-eat').onclick = (e) => { e.stopPropagation(); eatFish(index); };
+                } else {
+                    card.innerHTML = `
+                        <div class="name">${displayName}</div>
+                        <div class="info">￥${fish.price}</div>
+                        <button>卖出</button>
+                    `;
+                    card.querySelector('button').onclick = (e) => { e.stopPropagation(); sellFish(index); };
+                    card.onclick = () => { selectedFishIndex = index; renderShopItems(); };
+                }
+                container.appendChild(card);
+            });
+        }
+
+        function sellFish(index) {
+            const fish = gameState.inventory[index];
+            if (fish.cooked) return;
+            gameState.money += fish.price;
+            gameState.inventory.splice(index, 1);
+            selectedFishIndex = -1;
+            saveGame(); updateUI(); renderShopItems();
+            showFloatingText(`卖出 ${fish.name} +￥${fish.price}`);
+        }
+
+        function eatFish(index) {
+            const fish = gameState.inventory[index];
+            if (!fish.cooked) return;
+            gameState.hunger = Math.min(100, gameState.hunger + 20);
+            gameState.inventory.splice(index, 1);
+            saveGame(); updateUI(); renderShopItems();
+            showFloatingText("食用熟鱼，饥饿度 +20");
+        }
+
+        function toggleShop() {
+            const panel = document.getElementById('shop-panel');
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                setTimeout(() => { panel.style.display = 'none'; }, 250); 
+                saveGame();
+                if (gameState.touchEnabled === 0) document.body.requestPointerLock();
+            } else {
+                if (gameState.touchEnabled === 0) document.exitPointerLock();
+                panel.style.display = 'block';
+                void panel.offsetWidth; 
+                panel.classList.add('active');
+                updateUI();
+                selectedFishIndex = -1; 
+                renderShopItems();
+            }
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                setTimeout(() => { panel.style.display = 'none'; }, 250);
+                saveGame();
+                if (gameState.touchEnabled === 0) document.body.requestPointerLock();
+            } else {
+                if (gameState.touchEnabled === 0) document.exitPointerLock();
+                panel.style.display = 'block';
+                void panel.offsetWidth;
+                panel.classList.add('active');
+                
+                document.getElementById('touch-slider').value = gameState.touchEnabled;
+                document.getElementById('ring-slider').value = gameState.ringSize;
+                document.getElementById('grass-slider').value = gameState.grassEnabled;
+                document.getElementById('wave-slider').value = gameState.waveEnabled;
+                document.getElementById('sens-slider').value = gameState.sensitivity;
+                document.getElementById('crosshair-slider').value = gameState.crosshairType;
+                document.getElementById('custom-crosshair').value = gameState.customCrosshairText;
+            }
+        }
+
+        document.getElementById('close-shop').onclick = toggleShop;
+        document.getElementById('close-settings').onclick = toggleSettings;
+        
+        document.getElementById('touch-slider').oninput = (e) => { 
+            gameState.touchEnabled = parseInt(e.target.value); 
+            applyTouchUI();
+            updateUI(); saveGame(); 
+        };
+
+        document.getElementById('ring-slider').oninput = (e) => {
+            gameState.ringSize = parseInt(e.target.value);
+            updateUI(); saveGame();
+        };
+        
+        document.getElementById('grass-slider').oninput = (e) => { 
+            gameState.grassEnabled = parseInt(e.target.value); 
+            grassGroup.visible = (gameState.grassEnabled === 1);
+            updateUI(); saveGame(); 
+        };
+        
+        document.getElementById('wave-slider').oninput = (e) => { 
+            gameState.waveEnabled = parseInt(e.target.value); 
+            if (gameState.waveEnabled === 0) {
+                const positions = water.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 2] = 0;
+                }
+                water.geometry.attributes.position.needsUpdate = true;
+                water.geometry.computeVertexNormals();
+            }
+            updateUI(); saveGame(); 
+        };
+
+        document.getElementById('sens-slider').oninput = (e) => { 
+            gameState.sensitivity = parseInt(e.target.value); 
+            updateUI(); saveGame(); 
+        };
+
+        document.getElementById('crosshair-slider').oninput = (e) => { 
+            gameState.crosshairType = parseInt(e.target.value); 
+            updateUI(); saveGame(); 
+        };
+
+        document.getElementById('custom-crosshair').oninput = (e) => {
+            gameState.customCrosshairText = e.target.value;
+            gameState.crosshairType = 3;
+            document.getElementById('crosshair-slider').value = 3;
+            updateUI(); saveGame();
+        };
+
+        document.getElementById('upgrade-btn').onclick = () => {
+            if (gameState.rodLevel < 10) {
+                const cost = Math.pow(2, gameState.rodLevel - 1) * 1000;
+                if (gameState.money >= cost) {
+                    gameState.money -= cost;
+                    gameState.rodLevel++;
+                    saveGame(); updateUI();
+                    showFloatingText("升级成功！");
+                }
+            }
+        };
+
+        document.getElementById('cook-fish-btn').onclick = () => {
+            if (selectedFishIndex === -1 || selectedFishIndex >= gameState.inventory.length) {
+                showFloatingText("请先在左侧点击选择一条生鱼");
+                return;
+            }
+            const fish = gameState.inventory[selectedFishIndex];
+            if (fish.cooked) { showFloatingText("这条鱼已经是熟的了"); return; }
+            if (gameState.money < 5) { showFloatingText("金币不足 ￥5"); return; }
+
+            gameState.money -= 5;
+            fish.cooked = true;
+            selectedFishIndex = -1;
+            saveGame(); updateUI(); renderShopItems();
+            showFloatingText(`成功烤制 ${fish.name}`);
+        };
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        applyTouchUI();
+        if (gameState.grassEnabled === 0) grassGroup.visible = false;
+        
+        updateUI();
+        animate();
+
+    </script>
+</body>
+</html>
