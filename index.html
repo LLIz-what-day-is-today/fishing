@@ -247,7 +247,7 @@
         
         input[type=range] { width: 100%; cursor: pointer; accent-color: #00FFFF; height: 20px; }
         input[type=text] { width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; color: white; outline: none; font-size: 16px; box-sizing: border-box; }
-        input[type=file] { width: 100%; color: white; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; }
+        .file-btn { background-color: #00FFFF; color: #333; border: none; padding: 10px; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px;}
         .range-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 14px; color: #aaa; }
 
         /* 漂浮文字 */
@@ -348,8 +348,9 @@
                 </div>
 
                 <div class="setting-item">
-                    <label>上传本地皮肤图片</label>
-                    <input type="file" id="skin-input" accept="image/*">
+                    <label>关联本地皮肤文件</label>
+                    <button id="skin-btn" class="file-btn">点击选择文件</button>
+                    <div style="font-size: 12px; color:#aaa; margin-top:5px;">*选好后会自动记住路径，只要文件不挪动下次打开会自动加载</div>
                 </div>
                 
                 <div class="setting-item">
@@ -443,11 +444,117 @@
         let selectedFishIndex = -1;
         let isChatting = false;
 
+        // ================= File System Access API (文件系统访问) =================
+        let db;
+        const dbRequest = indexedDB.open('FishingGameDB', 2);
+        
+        dbRequest.onupgradeneeded = (e) => {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains('assets')) {
+                db.createObjectStore('assets');
+            }
+        };
+        
+        dbRequest.onsuccess = (e) => {
+            db = e.target.result;
+            loadSkinFromDB(); // 连接成功后立刻读取皮肤
+        };
+
+        function loadSkinFromDB() {
+            if (!db) return;
+            const tx = db.transaction('assets', 'readonly');
+            const store = tx.objectStore('assets');
+            const getReq = store.get('skinHandle'); // 获取文件句柄
+            getReq.onsuccess = async () => {
+                const handle = getReq.result;
+                if (handle) {
+                    try {
+                        // 请求读取权限
+                        const permission = await handle.queryPermission({ mode: 'read' });
+                        if (permission === 'granted' || (await handle.requestPermission({ mode: 'read' })) === 'granted') {
+                            // 读取文件
+                            const file = await handle.getFile();
+                            readFileAsDataURL(file); // 转成 Base64 并加载
+                        } else {
+                            console.log("皮肤读取权限被拒绝，使用默认黑色");
+                        }
+                    } catch (err) {
+                        console.log("找不到文件或文件已被移动，使用默认黑色", err);
+                    }
+                }
+            };
+        }
+
+        // 读取文件并转换
+        function readFileAsDataURL(file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                // 如果文件太大，压一下
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const maxSize = 256;
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height && width > maxSize) {
+                        height *= maxSize / width;
+                        width = maxSize;
+                    } else if (height > maxSize) {
+                        width *= maxSize / height;
+                        height = maxSize;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    gameState.skinDataUrl = compressedBase64;
+                    broadcastState(true); // 通知别人
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 按钮点击逻辑
+        document.getElementById('skin-btn').onclick = async () => {
+            if (!window.showOpenFilePicker) {
+                alert("您的浏览器不支持文件路径记忆功能，请使用最新版 Chrome 或 Edge。");
+                return;
+            }
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'Images',
+                        accept: {'image/*': ['.png', '.jpg', '.jpeg', '.gif']},
+                    }]
+                });
+                
+                // 存入 IndexedDB 记住路径
+                if (db) {
+                    const tx = db.transaction('assets', 'readwrite');
+                    const store = tx.objectStore('assets');
+                    store.put(fileHandle, 'skinHandle');
+                }
+                
+                // 立刻读取并加载
+                const file = await fileHandle.getFile();
+                readFileAsDataURL(file);
+                
+                showFloatingText("文件路径已记住，下次自动加载");
+            } catch (err) {
+                console.log("用户取消选择", err);
+            }
+        };
+
+        // ================= 游戏存档 =================
         function loadGame() {
             const saved = localStorage.getItem('fishing_save');
             if (saved) {
                 try { 
                     const parsed = JSON.parse(saved);
+                    delete parsed.skinDataUrl; // 防止旧版本超大Base64卡死
                     gameState = { ...gameState, ...parsed };
                 } catch (e) {}
             }
@@ -458,7 +565,14 @@
         function saveGame() {
             gameState.playerPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
             gameState.playerRot = { pitch: pitch, yaw: yaw };
-            localStorage.setItem('fishing_save', JSON.stringify(gameState));
+            let saveData = { ...gameState };
+            delete saveData.skinDataUrl; // 剥离皮肤，只存文字数据
+            
+            try {
+                localStorage.setItem('fishing_save', JSON.stringify(saveData));
+            } catch (e) {
+                console.error("存档失败", e);
+            }
         }
         loadGame();
 
@@ -633,7 +747,6 @@
             return group;
         }
 
-        // 为远程玩家创建浮标和鱼线
         function createRemoteFishingGear() {
             const bGroup = new THREE.Group();
             const bTop = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshBasicMaterial({color: 0xffffff}));
@@ -1421,40 +1534,6 @@
             gameState.playerName = val;
             saveGame();
             broadcastState(true);
-        };
-
-        document.getElementById('skin-input').onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const maxSize = 256;
-                    let width = img.width;
-                    let height = img.height;
-                    if (width > height && width > maxSize) {
-                        height *= maxSize / width;
-                        width = maxSize;
-                    } else if (height > maxSize) {
-                        width *= maxSize / height;
-                        height = maxSize;
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-                    gameState.skinDataUrl = compressedBase64;
-                    saveGame();
-                    showFloatingText("皮肤已更新并保存");
-                    broadcastState(true);
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
         };
 
         document.getElementById('touch-slider').oninput = (e) => { 
