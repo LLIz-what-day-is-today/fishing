@@ -180,12 +180,17 @@
         }
         #touch-chat-send:active { background-color: #00BFFF; }
 
-        /* 全屏面板 (层级低于左上角按钮) */
+        /* ================= 全屏面板 (毛玻璃效果) ================= */
         .panel {
             pointer-events: auto;
             position: fixed; top: 0; left: 0;
             width: 100vw; height: 100vh;
-            background-color: rgba(0, 0, 0, 0.75);
+            
+            /* 核心修改：毛玻璃效果 */
+            background-color: rgba(0, 0, 0, 0.4); /* 降低黑色透明度，露出背后的画面 */
+            backdrop-filter: blur(15px); /* 高斯模糊背景 */
+            -webkit-backdrop-filter: blur(15px); /* 兼容 Safari */
+            
             color: white; padding: 20px; box-sizing: border-box;
             display: none; z-index: 100;
             opacity: 0; transition: opacity 0.25s ease;
@@ -193,7 +198,7 @@
         }
         .panel.active { display: block; opacity: 1; }
         
-        /* 关闭按钮固定右上角 (使用 fixed 保证不受滚动条影响) */
+        /* 关闭按钮固定右上角 */
         .ui-close {
             position: fixed; top: 15px; right: 25px;
             color: #FFFFFF; font-size: 45px; cursor: pointer;
@@ -224,9 +229,9 @@
         .shop-section-title { font-size: 20px; margin-bottom: 15px; color: #FFD700; }
         
         .item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px; }
-        .fish-card { background-color: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; justify-content: space-between; }
+        .fish-card { background-color: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; justify-content: space-between; }
         .fish-card:hover { border-color: #888; transform: translateY(-2px); }
-        .fish-card.selected { border-color: #00FFFF; background-color: rgba(0, 255, 255, 0.1); box-shadow: 0 0 10px rgba(0,255,255,0.3); }
+        .fish-card.selected { border-color: #00FFFF; background-color: rgba(0, 255, 255, 0.2); box-shadow: 0 0 10px rgba(0,255,255,0.3); }
         .fish-card .name { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
         .fish-card .info { font-size: 12px; color: #ccc; margin-bottom: 10px; }
         .fish-card button { background-color: #00FFFF; color: #333; border: none; padding: 6px 10px; font-size: 13px; font-weight: bold; cursor: pointer; border-radius: 4px; width: 100%; transition: background 0.2s; }
@@ -243,12 +248,12 @@
         
         /* 设置内部布局 */
         .settings-container { max-width: 600px; margin: 0 auto; margin-top: 20px; padding-bottom: 50px; }
-        .setting-item { margin-bottom: 20px; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; }
+        .setting-item { margin-bottom: 20px; background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; }
         .setting-item label { display: flex; justify-content: space-between; font-size: 16px; margin-bottom: 10px; }
         .setting-item label span { color: #00FFFF; font-weight: bold; }
         
         input[type=range] { width: 100%; cursor: pointer; accent-color: #00FFFF; height: 20px; }
-        input[type=text] { width: 100%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; color: white; outline: none; font-size: 16px; box-sizing: border-box; }
+        input[type=text] { width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; color: white; outline: none; font-size: 16px; box-sizing: border-box; }
         .file-btn { background-color: #00FFFF; color: #333; border: none; padding: 10px; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 5px;}
         .range-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 14px; color: #aaa; }
 
@@ -428,6 +433,7 @@
             { name: '草鱼', price: 15, weight: 10 }, 
             { name: '章鱼', price: 25, weight: 8 },  
             { name: '螃蟹', price: 10, weight: 12 }, 
+            { name: '三文鱼', price: 30, weight: 5 }, // 新增三文鱼
             { name: '大肥鱼', price: 10000, weight: 0.05 }
         ];
         const SHRIMP = { name: '虾', price: 1 };
@@ -1180,7 +1186,6 @@
             const targetTerrainY = getTerrainHeight(target.x, target.z);
             if (targetTerrainY > 0.5) {
                 isFishingOnWater = false; target.y = targetTerrainY + 0.1;
-                // 删除提示，直接抛到陆地
             } else {
                 isFishingOnWater = true; target.y = 0.1;
             }
@@ -1497,26 +1502,53 @@
             showFloatingText("食用熟鱼，饥饿度 +20");
         }
 
+        // === 修改：打开商店和设置时的互斥逻辑 ===
         function toggleShop() {
             const panel = document.getElementById('shop-panel');
+            const settingsPanel = document.getElementById('settings-panel');
+            
             if (panel.classList.contains('active')) {
-                panel.classList.remove('active'); setTimeout(() => { panel.style.display = 'none'; }, 250); saveGame();
+                panel.classList.remove('active'); 
+                setTimeout(() => { panel.style.display = 'none'; }, 250); 
+                saveGame();
                 if (gameState.touchEnabled === 0 && !isChatting) document.body.requestPointerLock();
             } else {
+                // 如果设置面板开着，先关掉它
+                if (settingsPanel.classList.contains('active')) {
+                    settingsPanel.classList.remove('active');
+                    setTimeout(() => { settingsPanel.style.display = 'none'; }, 250);
+                }
+                
                 if (gameState.touchEnabled === 0) document.exitPointerLock();
-                panel.style.display = 'block'; void panel.offsetWidth; panel.classList.add('active');
-                updateUI(); selectedFishIndex = -1; renderShopItems();
+                panel.style.display = 'block'; 
+                void panel.offsetWidth; 
+                panel.classList.add('active');
+                updateUI(); 
+                selectedFishIndex = -1; 
+                renderShopItems();
             }
         }
 
         function toggleSettings() {
             const panel = document.getElementById('settings-panel');
+            const shopPanel = document.getElementById('shop-panel');
+            
             if (panel.classList.contains('active')) {
-                panel.classList.remove('active'); setTimeout(() => { panel.style.display = 'none'; }, 250); saveGame();
+                panel.classList.remove('active'); 
+                setTimeout(() => { panel.style.display = 'none'; }, 250); 
+                saveGame();
                 if (gameState.touchEnabled === 0 && !isChatting) document.body.requestPointerLock();
             } else {
+                // 如果商店面板开着，先关掉它
+                if (shopPanel.classList.contains('active')) {
+                    shopPanel.classList.remove('active');
+                    setTimeout(() => { shopPanel.style.display = 'none'; }, 250);
+                }
+                
                 if (gameState.touchEnabled === 0) document.exitPointerLock();
-                panel.style.display = 'block'; void panel.offsetWidth; panel.classList.add('active');
+                panel.style.display = 'block'; 
+                void panel.offsetWidth; 
+                panel.classList.add('active');
                 
                 document.getElementById('touch-slider').value = gameState.touchEnabled;
                 document.getElementById('ring-slider').value = gameState.ringSize;
