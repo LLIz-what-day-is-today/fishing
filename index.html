@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>fishing</title>
+    <title>fishing(LL-team AB)</title>
     <link rel="icon" href="https://pic.pngsucai.com/00/92/47/00764b2fd6e8c67e.webp">
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
@@ -44,15 +44,10 @@
             transform-origin: bottom right; 
         }
 
-        /* ================= 触控 UI ================= */
-        #mobile-controls {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 20;
-        }
-        
-        .top-left-btns {
-            position: absolute; top: 15px; left: 15px;
-            display: flex; gap: 10px; pointer-events: auto;
+        /* ================= 常驻左上角 UI 按钮 (层级最高) ================= */
+        .global-top-left {
+            position: fixed; top: 15px; left: 15px;
+            display: flex; gap: 10px; pointer-events: auto; z-index: 9999;
         }
         .icon-btn {
             width: 45px; height: 45px; background-color: rgba(40, 40, 40, 0.7);
@@ -60,14 +55,20 @@
             color: white; font-size: 24px; font-weight: bold;
             border: 2px solid rgba(255, 255, 255, 0.3);
             backdrop-filter: blur(4px);
-            touch-action: none;
+            touch-action: none; cursor: pointer;
             background-size: contain; background-repeat: no-repeat; background-position: center;
+            transition: transform 0.1s;
         }
-        .icon-btn:active { background-color: rgba(100, 100, 100, 0.8); }
-
+        .icon-btn:active { transform: scale(0.9); background-color: rgba(100, 100, 100, 0.8); }
         #m-btn-shop {
             background-image: url('https://images.icon-icons.com/1580/PNG/512/2849824-basket-buy-market-multimedia-shop-shopping-store_107977.png');
             filter: invert(1); 
+        }
+
+        /* ================= 触控 UI ================= */
+        #mobile-controls {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 20;
         }
 
         #joystick-area {
@@ -163,7 +164,7 @@
             width: 80vw; background-color: rgba(30, 30, 30, 0.95);
             padding: 20px; border-radius: 12px;
             display: none; flex-direction: column; gap: 15px;
-            z-index: 100; opacity: 0; transition: all 0.2s ease;
+            z-index: 10000; opacity: 0; transition: all 0.2s ease;
             pointer-events: auto; border: 2px solid #555;
         }
         #touch-chat-panel.active { display: flex; opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -179,7 +180,7 @@
         }
         #touch-chat-send:active { background-color: #00BFFF; }
 
-        /* 全屏面板 */
+        /* 全屏面板 (层级低于左上角按钮) */
         .panel {
             pointer-events: auto;
             position: fixed; top: 0; left: 0;
@@ -192,10 +193,11 @@
         }
         .panel.active { display: block; opacity: 1; }
         
+        /* 关闭按钮固定右上角 (使用 fixed 保证不受滚动条影响) */
         .ui-close {
-            position: absolute; top: 15px; right: 25px;
+            position: fixed; top: 15px; right: 25px;
             color: #FFFFFF; font-size: 45px; cursor: pointer;
-            font-weight: bold; line-height: 1; z-index: 101;
+            font-weight: bold; line-height: 1; z-index: 10001;
             transition: transform 0.2s, color 0.2s;
         }
         .ui-close:hover { color: #DDDDDD; transform: scale(1.1) rotate(90deg); }
@@ -280,12 +282,14 @@
     <div id="water-overlay"></div>
     <div id="death-overlay"></div>
 
+    <!-- 常驻左上角按钮 (层级 9999) -->
+    <div class="global-top-left">
+        <div class="icon-btn" id="m-btn-settings">☰</div>
+        <div class="icon-btn" id="m-btn-shop"></div>
+    </div>
+
     <!-- 触控模式 UI -->
     <div id="mobile-controls">
-        <div class="top-left-btns">
-            <div class="icon-btn" id="m-btn-settings">☰</div>
-            <div class="icon-btn" id="m-btn-shop"></div>
-        </div>
         <div id="joystick-area">
             <div id="joystick-base"><div id="joystick-knob"></div></div>
         </div>
@@ -421,7 +425,10 @@
             { name: '金鱼', price: 5, weight: 25 }, { name: '青鱼', price: 8, weight: 20 },
             { name: '泥鳅', price: 10, weight: 15 }, { name: '鲈鱼', price: 13, weight: 15 },
             { name: '鲍鱼', price: 5, weight: 15 }, { name: '鲩鱼', price: 20, weight: 20 },
-            { name: '草鱼', price: 15, weight: 10 }, { name: '大肥鱼', price: 10000, weight: 0.05 }
+            { name: '草鱼', price: 15, weight: 10 }, 
+            { name: '章鱼', price: 25, weight: 8 },  
+            { name: '螃蟹', price: 10, weight: 12 }, 
+            { name: '大肥鱼', price: 10000, weight: 0.05 }
         ];
         const SHRIMP = { name: '虾', price: 1 };
         const FISHING_TIMES = [0, 20, 18, 16, 14, 12, 10, 8, 6, 3, 1.5]; 
@@ -444,7 +451,7 @@
         let selectedFishIndex = -1;
         let isChatting = false;
 
-        // ================= File System Access API (文件系统访问) =================
+        // ================= File System Access API =================
         let db;
         const dbRequest = indexedDB.open('FishingGameDB', 2);
         
@@ -457,26 +464,22 @@
         
         dbRequest.onsuccess = (e) => {
             db = e.target.result;
-            loadSkinFromDB(); // 连接成功后立刻读取皮肤
+            loadSkinFromDB(); 
         };
 
         function loadSkinFromDB() {
             if (!db) return;
             const tx = db.transaction('assets', 'readonly');
             const store = tx.objectStore('assets');
-            const getReq = store.get('skinHandle'); // 获取文件句柄
+            const getReq = store.get('skinHandle'); 
             getReq.onsuccess = async () => {
                 const handle = getReq.result;
                 if (handle) {
                     try {
-                        // 请求读取权限
                         const permission = await handle.queryPermission({ mode: 'read' });
                         if (permission === 'granted' || (await handle.requestPermission({ mode: 'read' })) === 'granted') {
-                            // 读取文件
                             const file = await handle.getFile();
-                            readFileAsDataURL(file); // 转成 Base64 并加载
-                        } else {
-                            console.log("皮肤读取权限被拒绝，使用默认黑色");
+                            readFileAsDataURL(file); 
                         }
                     } catch (err) {
                         console.log("找不到文件或文件已被移动，使用默认黑色", err);
@@ -485,11 +488,9 @@
             };
         }
 
-        // 读取文件并转换
         function readFileAsDataURL(file) {
             const reader = new FileReader();
             reader.onload = (event) => {
-                // 如果文件太大，压一下
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
@@ -510,14 +511,13 @@
                     
                     const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
                     gameState.skinDataUrl = compressedBase64;
-                    broadcastState(true); // 通知别人
+                    broadcastState(true); 
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        // 按钮点击逻辑
         document.getElementById('skin-btn').onclick = async () => {
             if (!window.showOpenFilePicker) {
                 alert("您的浏览器不支持文件路径记忆功能，请使用最新版 Chrome 或 Edge。");
@@ -531,14 +531,12 @@
                     }]
                 });
                 
-                // 存入 IndexedDB 记住路径
                 if (db) {
                     const tx = db.transaction('assets', 'readwrite');
                     const store = tx.objectStore('assets');
                     store.put(fileHandle, 'skinHandle');
                 }
                 
-                // 立刻读取并加载
                 const file = await fileHandle.getFile();
                 readFileAsDataURL(file);
                 
@@ -554,7 +552,7 @@
             if (saved) {
                 try { 
                     const parsed = JSON.parse(saved);
-                    delete parsed.skinDataUrl; // 防止旧版本超大Base64卡死
+                    delete parsed.skinDataUrl; 
                     gameState = { ...gameState, ...parsed };
                 } catch (e) {}
             }
@@ -566,7 +564,7 @@
             gameState.playerPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z };
             gameState.playerRot = { pitch: pitch, yaw: yaw };
             let saveData = { ...gameState };
-            delete saveData.skinDataUrl; // 剥离皮肤，只存文字数据
+            delete saveData.skinDataUrl; 
             
             try {
                 localStorage.setItem('fishing_save', JSON.stringify(saveData));
@@ -694,10 +692,11 @@
         bobberGroup.visible = false;
         scene.add(bobberGroup);
 
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, transparent: true, opacity: 0.8 });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
         const lineGeo = new THREE.BufferGeometry();
         const fishingLine = new THREE.Line(lineGeo, lineMat);
-        fishingLine.visible = false; fishingLine.frustumCulled = false; fishingLine.renderOrder = 999;
+        fishingLine.visible = false; 
+        fishingLine.frustumCulled = false; 
         scene.add(fishingLine);
 
         // ================= 联机网络逻辑 =================
@@ -759,7 +758,7 @@
             scene.add(bGroup);
 
             const rLineGeo = new THREE.BufferGeometry();
-            const rLine = new THREE.Line(rLineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.6 }));
+            const rLine = new THREE.Line(rLineGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
             rLine.visible = false;
             rLine.frustumCulled = false;
             scene.add(rLine);
@@ -965,7 +964,8 @@
             if (gameState.touchEnabled === 1) return;
             const isShopOpen = document.getElementById('shop-panel').classList.contains('active');
             const isSettingsOpen = document.getElementById('settings-panel').classList.contains('active');
-            if (!isShopOpen && !isSettingsOpen && !isChatting && e.target.id !== 'pc-chat-input' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+            // 忽略常驻按钮的点击
+            if (!isShopOpen && !isSettingsOpen && !isChatting && e.target.id !== 'pc-chat-input' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.closest('.global-top-left')) {
                  document.body.requestPointerLock();
             }
         });
@@ -1101,10 +1101,15 @@
         btnJump.addEventListener('pointercancel', (e) => { jump = false; });
         btnJump.addEventListener('pointerleave', (e) => { jump = false; });
 
+        // 全局设置和商店按钮绑定 (绝对常驻)
         const mBtnSettings = document.getElementById('m-btn-settings');
-        mBtnSettings.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); toggleSettings(); });
+        mBtnSettings.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); toggleSettings(); 
+        });
         const mBtnShop = document.getElementById('m-btn-shop');
-        mBtnShop.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); toggleShop(); });
+        mBtnShop.addEventListener('pointerdown', (e) => { 
+            e.stopPropagation(); e.preventDefault(); toggleShop(); 
+        });
 
         let isDraggingView = false;
         let lastTouchX = 0, lastTouchY = 0;
@@ -1175,7 +1180,7 @@
             const targetTerrainY = getTerrainHeight(target.x, target.z);
             if (targetTerrainY > 0.5) {
                 isFishingOnWater = false; target.y = targetTerrainY + 0.1;
-                showFloatingText("抛在了陆地上，无法钓到鱼");
+                // 删除提示，直接抛到陆地
             } else {
                 isFishingOnWater = true; target.y = 0.1;
             }
