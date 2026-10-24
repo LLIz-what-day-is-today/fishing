@@ -1332,12 +1332,15 @@
             const waterOverlay = document.getElementById('water-overlay');
             if (isUnderwater) waterOverlay.classList.add('active'); else waterOverlay.classList.remove('active');
 
+            // 饥饿度系统 (速度减半)
             hungerTick += delta;
             const isMoving = moveForward || moveBackward || moveLeft || moveRight;
             const isActivelyMoving = isMoving || jump;
-            let hungerLossRate = 10; 
-            if (isActivelyMoving) hungerLossRate = 5; 
-            if (isSprinting) hungerLossRate = 2; 
+            
+            // 原先分别是 10, 5, 2，现在翻倍
+            let hungerLossRate = 20; 
+            if (isActivelyMoving) hungerLossRate = 10; 
+            if (isSprinting) hungerLossRate = 4; 
 
             if (hungerTick >= hungerLossRate) {
                 gameState.hunger -= 1; hungerTick = 0;
@@ -1502,7 +1505,7 @@
             showFloatingText("食用熟鱼，饥饿度 +20");
         }
 
-        // === 修改：打开商店和设置时的互斥逻辑 ===
+        // 打开商店和设置时的互斥逻辑
         function toggleShop() {
             const panel = document.getElementById('shop-panel');
             const settingsPanel = document.getElementById('settings-panel');
