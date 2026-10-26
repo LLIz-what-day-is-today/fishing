@@ -433,7 +433,9 @@
             { name: '草鱼', price: 15, weight: 10 }, 
             { name: '章鱼', price: 25, weight: 8 },  
             { name: '螃蟹', price: 10, weight: 12 }, 
-            { name: '三文鱼', price: 30, weight: 5 }, // 新增三文鱼
+            { name: '三文鱼', price: 30, weight: 5 }, 
+            { name: '飞鱼', price: 10, weight: 15 },     // 新增飞鱼
+            { name: '金枪鱼', price: 2000, weight: 2 },  // 新增金枪鱼
             { name: '大肥鱼', price: 10000, weight: 0.05 }
         ];
         const SHRIMP = { name: '虾', price: 1 };
@@ -1120,13 +1122,19 @@
         let isDraggingView = false;
         let lastTouchX = 0, lastTouchY = 0;
 
+        // ===== 修复：全屏触控拖动视角 =====
         renderer.domElement.addEventListener('pointerdown', (e) => {
             const isUIOpen = document.getElementById('shop-panel').classList.contains('active') || document.getElementById('settings-panel').classList.contains('active');
             if (isUIOpen || gameState.touchEnabled === 0 || isChatting) return;
-            pointerDownTime = performance.now(); pointerDownPos = { x: e.clientX, y: e.clientY }; hasDragged = false;
-            if (e.clientX > window.innerWidth / 2) {
-                isDraggingView = true; lastTouchX = e.clientX; lastTouchY = e.clientY;
-            }
+            
+            pointerDownTime = performance.now(); 
+            pointerDownPos = { x: e.clientX, y: e.clientY }; 
+            hasDragged = false;
+            
+            isDraggingView = true; 
+            lastTouchX = e.clientX; 
+            lastTouchY = e.clientY;
+            
             renderer.domElement.setPointerCapture(e.pointerId);
         });
 
